@@ -6,11 +6,13 @@ import com.zzdzt.endfield_spellbook.element.InkWaterfallEntity;
 import com.zzdzt.endfield_spellbook.element.SunderbladeEntity;
 import com.zzdzt.endfield_spellbook.element.TargetMarkEntity;
 import com.zzdzt.endfield_spellbook.spell.bloodwing.BloodwingEntity;
+import com.zzdzt.endfield_spellbook.spell.focus.FocusMarkEntity;
 import com.zzdzt.endfield_spellbook.spell.gloompurge.GloompurgeMarkEntity;
 import com.zzdzt.endfield_spellbook.spell.liquidnitrogencannon.LncProjectileEntity;
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanBlastVisualEntity;
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanEntity;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.FlameRingEntity;
+import com.zzdzt.endfield_spellbook.spell.smoulderingfire.FlameRingAttackEntity;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.PhantomBladeEntity;
 
 import net.minecraft.resources.ResourceLocation;
@@ -125,6 +127,16 @@ public class EntityRegistry {
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "flame_ring").toString())
         );
 
+    // Server-only controller: attack timing is shared with the visible ring; no client renderer/tracking.
+    public static final RegistryObject<EntityType<FlameRingAttackEntity>> FLAME_RING_ATTACK =
+        ENTITY_TYPES.register("flame_ring_attack", () ->
+            EntityType.Builder.<FlameRingAttackEntity>of(FlameRingAttackEntity::new, MobCategory.MISC)
+                .sized(0.1f, 0.1f)
+                .clientTrackingRange(0)
+                .updateInterval(20)
+                .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "flame_ring_attack").toString())
+        );
+
     // 衔火血翼（驱火焚影：俯冲/盘桓/转移/爆裂载体，V1 隐形 + 血萤云表现）
     public static final RegistryObject<EntityType<BloodwingEntity>> BLOODWING =
         ENTITY_TYPES.register("bloodwing", () ->
@@ -133,6 +145,17 @@ public class EntityRegistry {
                 .clientTrackingRange(64)
                 .updateInterval(1)   // 轨道自主运动，逐 tick 同步保平滑
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "bloodwing").toString())
+        );
+
+    // 聚焦标记（指定研究对象：跟随目标的服务端聚焦标记，附着补层监听载体）
+    // 纯服务端实体（clientTrackingRange=0，无渲染器）：视觉走周期电磁火花广播
+    public static final RegistryObject<EntityType<FocusMarkEntity>> FOCUS_MARK =
+        ENTITY_TYPES.register("focus_mark", () ->
+            EntityType.Builder.<FocusMarkEntity>of(FocusMarkEntity::new, MobCategory.MISC)
+                .sized(0.5f, 0.5f)
+                .clientTrackingRange(0)
+                .updateInterval(20)
+                .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "focus_mark").toString())
         );
 
     public static void register(IEventBus eventBus) {

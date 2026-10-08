@@ -15,14 +15,14 @@ import net.minecraft.util.Mth;
 public final class FlameRingCastCurve {
 
     /** 剑砍段（tick）：幻影魔剑扫掠窗，环的前段严格跟随剑（剑尖即环头）。 */
-    public static final int SLASH_TICKS = 5;
+    public static final int SLASH_TICKS = 4;
     /** 火焰自传播时长（tick）：剑砍完自身弧段后，火顺着剑势跑完剩余弧。 */
-    public static final int PROPAGATE_TICKS = 6;
+    public static final int PROPAGATE_TICKS = 5;
     /** 满环燃烧时长（tick）。 */
-    public static final int BURN_TICKS = 4;
+    public static final int BURN_TICKS = 3;
     /** 溃散时长（tick）：切向火星爆发收尾。 */
-    public static final int FADE_TICKS = 5;
-    /** 播放总时长（tick）= 四段之和。 */
+    public static final int FADE_TICKS = 4;
+    /** 播放总时长（tick）= 四段之和（整体提速 20%：20 → 16，吟唱 15t 不变）。 */
     public static final int LIFETIME = SLASH_TICKS + PROPAGATE_TICKS + BURN_TICKS + FADE_TICKS;
 
     /** 魔剑前置衔接段占比：从背后浮位加速飞向劈砍起点（环的剑砍段与魔剑扫掠窗对齐）。 */

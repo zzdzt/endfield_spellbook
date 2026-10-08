@@ -3,6 +3,7 @@ package com.zzdzt.endfield_spellbook.registry;
 import com.zzdzt.endfield_spellbook.EndfieldSpellbook;
 import com.zzdzt.endfield_spellbook.spell.bloodwing.BloodwingSpell;
 import com.zzdzt.endfield_spellbook.spell.gloompurge.GloompurgeSpell;
+import com.zzdzt.endfield_spellbook.spell.focus.FocusSpell;
 import com.zzdzt.endfield_spellbook.spell.jingtingjue.SunderbladeStrikeSpell;
 import com.zzdzt.endfield_spellbook.spell.liquidnitrogencannon.LiquidNitrogenCannonSpell;
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanSpell;
@@ -60,6 +61,10 @@ public class SpellRegistry {
     // ========== 青霆剑诀 ==========
     public static final RegistryObject<AbstractSpell> SUNDERBLADE_STRIKE =
         SPELLS.register("sunderblade_strike", SunderbladeStrikeSpell::new);
+
+    // ========== 指定研究对象 ==========
+    public static final RegistryObject<AbstractSpell> DESIGNATED_SUBJECT =
+        SPELLS.register("designated_subject", FocusSpell::new);
 
     public static void register(IEventBus eventBus) {
         SPELLS.register(eventBus);

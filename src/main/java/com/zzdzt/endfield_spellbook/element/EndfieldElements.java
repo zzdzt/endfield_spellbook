@@ -44,6 +44,12 @@ public final class EndfieldElements {
     private EndfieldElements() {
     }
 
+    /**
+     * 补层重入防护：聚焦标记的补层 apply 不再广播通知（防自触发连锁）。
+     * 全部调用在服务端主线程，普通静态标志即可。
+     */
+    private static boolean IN_APPLY;
+
     // ==================== 数值占位（全部待定，进游戏后统一调） ====================
 
     /** 附着层数上限（原作 4 层封顶）。 */
@@ -90,9 +96,32 @@ public final class EndfieldElements {
             triggerReaction(level, attacker, target, element, stage, spellPower);
         }
         refreshRing(target, now);
+        // 附着施加广播（聚焦补层等监听器）：IN_APPLY 重入期间不再通知——补层链止于一层
+        if (!IN_APPLY) {
+            IN_APPLY = true;
+            try {
+                InflictionHub.notifyApplied(attacker, target, element);
+            } finally {
+                IN_APPLY = false;
+            }
+        }
     }
 
     // ==================== 消费者 ====================
+
+    /**
+     * 聚焦补层专用：施加附着但<b>不广播</b>（补层不视为新的"受到附着"，防延迟任务再触发补层连锁）。
+     * 叠加/反应规则与 {@link #apply} 完全一致。
+     */
+    public static void applyNoNotify(LivingEntity attacker, LivingEntity target, EndfieldElement element) {
+        if (!(target.level() instanceof ServerLevel)) return;
+        IN_APPLY = true;
+        try {
+            apply(attacker, target, element);
+        } finally {
+            IN_APPLY = false;
+        }
+    }
 
     /** 目标当前是否持有指定元素的有效附着。 */
     public static boolean hasElement(LivingEntity target, EndfieldElement element) {

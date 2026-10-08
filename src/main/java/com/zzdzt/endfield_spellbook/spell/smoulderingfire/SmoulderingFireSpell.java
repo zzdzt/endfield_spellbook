@@ -137,8 +137,10 @@ public class SmoulderingFireSpell extends AbstractSpell {
 
         // ① 吸收：横扫范围内的敌人身上的灼热附着 → 熔火
         List<LivingEntity> targets = collectTargets(level, entity, hitLocation, RADIUS);
+        boolean slashAttack = hasSlashWeapon(entity);
         float radius = RADIUS;
         float damageMult = 1.0f;
+        boolean enhanced = false;
 
         if (level instanceof ServerLevel serverLevel) {
             int absorbed = 0;
@@ -153,44 +155,54 @@ public class SmoulderingFireSpell extends AbstractSpell {
                 PlayerCharges.consumeAll(entity, PlayerChargeType.MOLTEN_FIRE);
                 radius *= ENHANCED_RADIUS_MULT;
                 damageMult = ENHANCED_DAMAGE_MULT;
+                enhanced = true;
                 launchEnhanced(serverLevel, entity, hitLocation, radius, forward);
                 targets = collectTargets(level, entity, hitLocation, radius);
             }
 
             // 幻影魔剑协同（纯视觉，无伤害）：主手武器有攻击伤害时投影横扫（与斩击同向）
-            if (hasSlashWeapon(entity)) {
+            if (slashAttack) {
                 boolean mirrored = playerMagicData.getCastingEquipmentSlot()
                     .equals(SpellSelectionManager.OFFHAND);
+                // 强化焚灭：环弧半径同步 ×1.5（视觉环、魔剑轨迹与伤害弧一致外扩，5.25）
+                float arcRadius = enhanced ? DISTANCE * ENHANCED_RADIUS_MULT : DISTANCE;
                 // 焚灭大回环斩：幻影魔剑砍出火环（环头=剑尖，弧面跟随施法准星），火焰顺剑势跑满一圈后碎裂
                 float[] angles = slashAngles(forward, mirrored);
                 spawnPhantomBlade(serverLevel, entity, chantOffset(entity, forward), angles[0], angles[1],
-                    entity.getXRot(), entity.getYRot());
+                    entity.getXRot(), entity.getYRot(), arcRadius);
                 level.addFreshEntity(new FlameRingEntity(
                     EntityRegistry.FLAME_RING.get(), serverLevel,
-                    entity.position(), DISTANCE, angles[0], angles[1],
+                    entity.position(), arcRadius, angles[0], angles[1],
+                    entity.getXRot(), entity.getYRot()));
+                // Share the visual ring's origin, radius, plane and reveal curve for authoritative hits.
+                level.addFreshEntity(new FlameRingAttackEntity(
+                    EntityRegistry.FLAME_RING_ATTACK.get(), serverLevel, entity,
+                    this.getDamageSource(entity), getDamage(spellLevel, entity) * damageMult,
+                    entity.position(), arcRadius, angles[0], angles[1],
                     entity.getXRot(), entity.getYRot()));
             }
         }
 
-        // ③ 结算横扫伤害（主手+副手武器伤害叠加）
-        var damageSource = this.getDamageSource(entity);
+        // ③ 魔剑/火环演出使用新弧段逐 tick 命中；无魔剑演出时保留旧范围伤害作为兼容回退。
+        if (!slashAttack) {
+            var damageSource = this.getDamageSource(entity);
+            for (LivingEntity livingTarget : targets) {
+                float baseDamage = getDamage(spellLevel, entity) * damageMult;
+                if (entity.distanceToSqr(livingTarget) >= radius * radius) continue;
 
-        for (LivingEntity livingTarget : targets) {
-            float baseDamage = getDamage(spellLevel, entity) * damageMult;
-            if (entity.distanceToSqr(livingTarget) >= radius * radius) continue;
+                if (DamageSources.applyDamage(livingTarget, baseDamage, damageSource)) {
+                    MagicManager.spawnParticles(level, ParticleHelper.FIRE,
+                        livingTarget.getX(),
+                        livingTarget.getY() + livingTarget.getBbHeight() * 0.5f,
+                        livingTarget.getZ(),
+                        30,
+                        livingTarget.getBbWidth() * 0.5f,
+                        livingTarget.getBbHeight() * 0.5f,
+                        livingTarget.getBbWidth() * 0.5f,
+                        0.03, false);
 
-            if (DamageSources.applyDamage(livingTarget, baseDamage, damageSource)) {
-                MagicManager.spawnParticles(level, ParticleHelper.FIRE,
-                    livingTarget.getX(),
-                    livingTarget.getY() + livingTarget.getBbHeight() * 0.5f,
-                    livingTarget.getZ(),
-                    30,
-                    livingTarget.getBbWidth() * 0.5f,
-                    livingTarget.getBbHeight() * 0.5f,
-                    livingTarget.getBbWidth() * 0.5f,
-                    0.03, false);
-
-                EnchantmentHelper.doPostDamageEffects(entity, livingTarget);
+                    EnchantmentHelper.doPostDamageEffects(entity, livingTarget);
+                }
             }
         }
 
@@ -263,23 +275,18 @@ public class SmoulderingFireSpell extends AbstractSpell {
     /** 幻影魔剑横扫（纯视觉）：投影主手武器沿准星斜面弧线扫过（弧参数见 {@link #slashAngles}）。 */
     private static void spawnPhantomBlade(ServerLevel level, LivingEntity caster, Vec3 chantOffset,
                                           float startAngle, float sweepAngle,
-                                          float lookPitch, float lookYaw) {
+                                          float lookPitch, float lookYaw, float arcRadius) {
         ItemStack weapon = caster.getMainHandItem();
         if (weapon.isEmpty()) return;
 
         level.addFreshEntity(new PhantomBladeEntity(
             EntityRegistry.PHANTOM_BLADE.get(), level, weapon.copy(),
-            caster.position(), chantOffset, DISTANCE, startAngle, sweepAngle, false,
+            caster.position(), chantOffset, arcRadius, startAngle, sweepAngle, false,
             lookPitch, lookYaw));
         // 命中点余烬爆散（挥砍终点的火星反馈，纯视觉）
-        var hitPos = caster.getEyePosition().add(caster.getForward().scale(DISTANCE));
+        var hitPos = caster.getEyePosition().add(caster.getForward().scale(arcRadius));
         MagicManager.spawnParticles(level, ParticleHelper.EMBERS,
             hitPos.x, hitPos.y, hitPos.z, 18, 0.25, 0.25, 0.25, 0.02, true);
-    }
-
-    /** 强化态的横扫半径。 */
-    private static float radiusFor(float base) {
-        return base * ENHANCED_RADIUS_MULT;
     }
 
     /**

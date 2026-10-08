@@ -18,6 +18,7 @@ import io.redspace.ironsspellbooks.entity.mobs.IMagicSummon;
 import io.redspace.ironsspellbooks.particle.BlastwaveParticleOptions;
 import io.redspace.ironsspellbooks.particle.SparkParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -479,26 +480,97 @@ public class BloodwingEntity extends Entity implements IMagicSummon, AntiMagicSu
         onUnSummon(); // 爆裂 = 收尾消散
     }
 
-    // ==================== 客户端：血萤云（V1 视觉主体） ====================
+    // ==================== 客户端：血萤 + 血雾（V1 视觉主体） ====================
+
+    // 血雾期望生成率（每 tick；装饰粒子 overrideLimiter=false，低画质自动被裁剪）
+    private static final float MIST_CORE_RATE = 0.5f;    // 贴身暗芯（翼身厚度）
+    private static final float MIST_OUTER_RATE = 0.2f;   // 外围淡胀（蓬松边缘）
+    private static final float MIST_TRAIL_RATE = 0.6f;   // 轨迹残影（滞后弧带）
 
     private void tickClient() {
         Phase p = getPhase();
-        // 蓄势收束期血萤贴身聚集，俯冲期加密，其余常驻
-        float jitter = p == Phase.BURST_WINDUP ? 0.12f : 0.6f;
-        int count = p == Phase.DIVE ? 4 : 2;
-        for (int i = 0; i < count; i++) {
-            Vec3 offset = new Vec3(
-                (random.nextFloat() - 0.5f) * jitter,
-                (random.nextFloat() - 0.5f) * jitter,
-                (random.nextFloat() - 0.5f) * jitter);
-            Vec3 motion = new Vec3(
-                (random.nextFloat() - 0.5f) * 0.04,
-                random.nextFloat() * 0.02,
-                (random.nextFloat() - 0.5f) * 0.04).add(getDeltaMovement().scale(0.5));
-            level().addParticle(ParticleRegistry.BLOOD_FIREFLY.get(),
-                getX() + offset.x, getY() + offset.y, getZ() + offset.z,
-                motion.x, motion.y, motion.z);
+        // 朝向 = 实体同步旋转（盘桓=轨道切线，俯冲=俯冲方向）。非生物实体客户端
+        // getDeltaMovement 不可靠，群体运动方向一律由旋转推导
+        Vec3 heading = Vec3.directionFromRotation(getXRot(), getYRot());
+
+        switch (p) {
+            case ASCEND -> {
+                // 血萤：从四周向翼心聚拢、向上收束（破壳凝聚）
+                for (int i = 0; i < 2; i++) {
+                    Vec3 offset = randomSphere().scale(0.55f);
+                    emit(offset, offset.normalize().scale(-0.045f).add(0, 0.012, 0));
+                }
+                // 血雾：短暂凝聚雾团（仅出生前 10 tick）
+                if (phaseTick < 10 && random.nextFloat() < MIST_CORE_RATE) {
+                    emitMist(ParticleRegistry.BLOOD_MIST_CORE.get(),
+                        randomSphere().scale(0.2f), new Vec3(0, 0.005, 0));
+                }
+            }
+            case DIVE -> {
+                // 血萤：扑杀轮廓——头部收紧、尾迹沿运动反方向拖出（彗星式猛扑剪影）
+                for (int i = 0; i < 4; i++) {
+                    Vec3 offset = heading.scale(-random.nextFloat() * 0.45f)
+                        .add(randomSphere().scale(0.18f));
+                    emit(offset, heading.scale(0.04f + random.nextFloat() * 0.03f)
+                        .add(randomSphere().scale(0.015f)));
+                }
+                // 血雾：沿俯冲轨迹的残影带——目标转移时自然拉出连接两目标的雾桥
+                if (random.nextFloat() < MIST_TRAIL_RATE) {
+                    Vec3 back = heading.scale(-(0.2f + random.nextFloat() * 0.5f));
+                    emitMist(ParticleRegistry.BLOOD_MIST_TRAIL.get(),
+                        back.add(randomSphere().scale(0.1f)), randomSphere().scale(0.005f));
+                }
+            }
+            case ORBIT -> {
+                // 血萤·先导（少量，前方提示扑杀方向）
+                if (random.nextInt(4) == 0) {
+                    emit(heading.scale(0.3f).add(randomSphere().scale(0.08f)),
+                        heading.scale(0.03f));
+                }
+                // 血萤·追猎主体：紧凑簇 + 切向涌动 + 向心渗透（盯住猎物）+ 偶发窜动
+                for (int i = 0; i < 3; i++) {
+                    float dart = random.nextInt(4) == 0 ? 3.0f : 1.0f;
+                    Vec3 inward = new Vec3(-heading.z, 0, heading.x).scale(0.015f);
+                    emit(randomSphere().scale(0.26f),
+                        heading.scale(0.025f * dart).add(inward)
+                            .add(randomSphere().scale(0.02f * dart)));
+                }
+                // 血萤·尾随（稀疏拖尾，逐渐拉长）
+                if (random.nextInt(2) == 0) {
+                    emit(heading.scale(-(0.25f + random.nextFloat() * 0.3f))
+                            .add(randomSphere().scale(0.12f)),
+                        heading.scale(0.012f).add(randomSphere().scale(0.01f)));
+                }
+                // 血雾：贴身暗芯（体积感）+ 沿轨道的断续残影弧带 + 外围淡胀
+                if (random.nextFloat() < MIST_CORE_RATE) {
+                    emitMist(ParticleRegistry.BLOOD_MIST_CORE.get(),
+                        randomSphere().scale(0.2f), Vec3.ZERO);
+                }
+                if (random.nextFloat() < MIST_TRAIL_RATE * 0.6f) {
+                    Vec3 back = heading.scale(-(0.3f + random.nextFloat() * 0.5f));
+                    emitMist(ParticleRegistry.BLOOD_MIST_TRAIL.get(),
+                        back.add(randomSphere().scale(0.15f)), heading.scale(0.008f));
+                }
+                if (random.nextFloat() < MIST_OUTER_RATE) {
+                    emitMist(ParticleRegistry.BLOOD_MIST_OUTER.get(),
+                        randomSphere().scale(0.35f), randomSphere().scale(0.004f));
+                }
+            }
+            case BURST_WINDUP -> {
+                // 血萤：向翼心塌缩
+                for (int i = 0; i < 3; i++) {
+                    Vec3 offset = randomSphere().scale(0.14f);
+                    emit(offset, offset.normalize().scale(-0.05f));
+                }
+                // 血雾：向心收缩（生成在外、速度朝内），叠加读作核心颜色变深
+                for (int i = 0; i < 2; i++) {
+                    Vec3 offset = randomSphere().scale(0.3f);
+                    emitMist(ParticleRegistry.BLOOD_MIST_CORE.get(),
+                        offset, offset.normalize().scale(-0.06f));
+                }
+            }
         }
+
         // 俯冲/蓄势：火焰细节点缀（"衔火"）
         if ((p == Phase.DIVE || p == Phase.BURST_WINDUP) && random.nextInt(3) == 0) {
             level().addParticle(ParticleTypes.FLAME, getX(), getY(), getZ(),
@@ -507,9 +579,28 @@ public class BloodwingEntity extends Entity implements IMagicSummon, AntiMagicSu
         }
     }
 
+    /** 血萤出射原语：翼心偏移 + 初速。 */
+    private void emit(Vec3 offset, Vec3 motion) {
+        level().addParticle(ParticleRegistry.BLOOD_FIREFLY.get(),
+            getX() + offset.x, getY() + offset.y, getZ() + offset.z,
+            motion.x, motion.y, motion.z);
+    }
+
+    /** 血雾出射原语：位置偏移 + 初速（近零——运动感由生成位置承担）。 */
+    private void emitMist(SimpleParticleType type, Vec3 offset, Vec3 motion) {
+        level().addParticle(type,
+            getX() + offset.x, getY() + offset.y, getZ() + offset.z,
+            motion.x, motion.y, motion.z);
+    }
+
+    /** [-0.5, 0.5] 均匀立方随机向量（出射散布用）。 */
+    private Vec3 randomSphere() {
+        return new Vec3(random.nextFloat() - 0.5f, random.nextFloat() - 0.5f, random.nextFloat() - 0.5f);
+    }
+
     @Override
     public void remove(@NotNull RemovalReason reason) {
-        // 消散演出：血萤迸散
+        // 消散演出：血萤迸散 + 血雾扩张成淡红雾后消散（爆裂结束/寿命尽的体积散逸）
         if (level().isClientSide) {
             for (int i = 0; i < 10; i++) {
                 level().addParticle(ParticleRegistry.BLOOD_FIREFLY.get(),
@@ -518,6 +609,11 @@ public class BloodwingEntity extends Entity implements IMagicSummon, AntiMagicSu
                     getZ() + (random.nextDouble() - 0.5) * 0.6,
                     (random.nextDouble() - 0.5) * 0.15, random.nextDouble() * 0.1,
                     (random.nextDouble() - 0.5) * 0.15);
+            }
+            for (int i = 0; i < 5; i++) {
+                Vec3 out = randomSphere().scale(0.08f);
+                emitMist(ParticleRegistry.BLOOD_MIST_OUTER.get(),
+                    randomSphere().scale(0.3f), out);
             }
         }
         super.remove(reason);

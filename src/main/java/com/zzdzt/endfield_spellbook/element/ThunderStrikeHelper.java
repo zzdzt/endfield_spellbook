@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -26,7 +27,7 @@ import java.util.Iterator;
  * 青霆剑诀雷击演出调度与参数（全部占位，进游戏后统一调）。
  *
  * <p>时序（对齐 ArcaneMag 惊霆诀定版 V2）：首击水墨雷瀑（瀑布雷柱）→
- * 持续期每柄剑错峰剑位水墨雷 + 目标位轮劈（tier≥3 加红闪）→ 收尾红芯雷瀑 + 墨黑晶刺放射。
+ * 持续期每柄剑错峰剑位水墨雷 + 目标位轮劈（tier≥3 加红闪）→ 收尾红芯雷瀑 + 水墨雷 + 墨黑晶刺放射。
  * tier = 剑数档（0~4，剑数/2），驱动副瀑布数量与红闪。
  *
  * <p>调度：静态延迟队列（GloompurgeEventHandler 同款），ServerTick 驱动。
@@ -48,6 +49,8 @@ public final class ThunderStrikeHelper {
     public static final float FIRST_SPREAD = 2.0f;
     /** 首击侧雷数量。 */
     public static final int FIRST_SIDE_BOLTS = 2;
+    /** 收尾水墨雷数量（任何 tier 都有）。 */
+    public static final int FINALE_INK_BOLTS = 2;
     /** 收尾雷瀑柱高。 */
     public static final float FINALE_HEIGHT = 26f;
     /** 收尾副瀑散布半径。 */
@@ -126,10 +129,12 @@ public final class ThunderStrikeHelper {
         });
     }
 
-    /** 收尾：红芯雷瀑 + 红闪（tier≥3，红闪仅出现在收尾）+ 墨黑晶刺放射 + 双音效（爆炸 + 雷声）。 */
-    public static void scheduleFinale(ServerLevel level, Vec3 targetPos, int tier, long delay) {
+    /** 收尾：红芯雷瀑 + 红闪（tier≥3，红闪仅出现在收尾）+ 水墨雷（任何 tier）+ 墨黑晶刺放射 + 双音效（爆炸 + 雷声）。
+     *  火帧时再次定向目标当前位置；目标已死/移除则退回 fallbackPos。 */
+    public static void scheduleFinale(ServerLevel level, LivingEntity target, Vec3 fallbackPos, int tier, long delay) {
         schedule(level, delay, () -> {
             RandomSource rand = level.getRandom();
+            Vec3 targetPos = target.isAlive() ? target.position() : fallbackPos;
             level.addFreshEntity(new InkWaterfallEntity(
                 EntityRegistry.INK_WATERFALL.get(), level, targetPos,
                 FINALE_HEIGHT, FINALE_SPREAD, tier));
@@ -137,6 +142,12 @@ public final class ThunderStrikeHelper {
             if (tier >= 3) {
                 spawnRedBolt(level, targetPos, rand);
                 spawnRedBolt(level, targetPos, rand);
+            }
+            // 水墨雷（任何 tier 都有：焦墨/苍青/亮白——加算雷瀑显不了黑，墨色由 InkZap 普通混合层补）
+            for (int i = 0; i < FINALE_INK_BOLTS; i++) {
+                double ang = rand.nextDouble() * Math.PI * 2;
+                double dist = 0.8 + rand.nextDouble() * 1.2;
+                spawnInkBolt(level, targetPos.add(Math.cos(ang) * dist, 0.1, Math.sin(ang) * dist), 1.0f, rand);
             }
             MagicManager.spawnParticles(level, ParticleTypes.FLASH,
                 targetPos.x, targetPos.y + 0.5, targetPos.z,

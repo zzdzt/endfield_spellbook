@@ -4,6 +4,7 @@ import com.zzdzt.endfield_spellbook.EndfieldSpellbook;
 import com.zzdzt.endfield_spellbook.effect.ArtsVulnerableEffect;
 import com.zzdzt.endfield_spellbook.effect.CombustionEffect;
 import com.zzdzt.endfield_spellbook.effect.ErodedEffect;
+import com.zzdzt.endfield_spellbook.effect.FocusedEffect;
 import com.zzdzt.endfield_spellbook.effect.FrozenEffect;
 import com.zzdzt.endfield_spellbook.effect.HeatVulnerableEffect;
 import com.zzdzt.endfield_spellbook.effect.LiquidNitrogenMarkedEffect;
@@ -40,6 +41,12 @@ public final class EffectRegistry {
 
     public static final RegistryObject<MobEffect> HEAT_VULNERABLE =
         EFFECTS.register("heat_vulnerable", HeatVulnerableEffect::new);
+
+    // ========== 指定研究对象 ==========
+
+    /** 聚焦 HUD 标记（纯显示，施加/移除由 FocusMarkEntity 托管）。 */
+    public static final RegistryObject<MobEffect> FOCUSED =
+        EFFECTS.register("focused", FocusedEffect::new);
 
     public static void register(IEventBus eventBus) {
         EFFECTS.register(eventBus);

@@ -66,5 +66,12 @@
   "item.endfield_spellbook.scroll_bloodwing": "Scroll of Fire-Driven Bloodwing",
   "effect.endfield_spellbook.heat_vulnerable": "Heat Vulnerability",
   "entity.endfield_spellbook.bloodwing": "Fire Bloodwing",
-  "death.attack.endfield_spellbook.bloodwing": "%1$s was burnt to ash by %2$s's Bloodwing"
+  "death.attack.endfield_spellbook.bloodwing": "%1$s was burnt to ash by %2$s's Bloodwing",
+
+  "spell.endfield_spellbook.designated_subject": "Designated Subject",
+  "spell.endfield_spellbook.designated_subject.guide": "Lock onto an enemy and keep it focused for a long duration. While focused, every elemental infliction applied to the target automatically gains one extra stack of the same element - stack growth and spell bursts are doubled. A target can only be focused by one caster at a time; cast again to move or refresh the focus",
+  "spell.endfield_spellbook.designated_subject.info.rule": "Focused enemies gain an extra stack per infliction; the latest focus overrides the previous one",
+  "item.endfield_spellbook.scroll_designated_subject": "Designated Subject Scroll",
+  "entity.endfield_spellbook.focus_mark": "Focus Mark",
+  "effect.endfield_spellbook.focused": "Focused"
 }

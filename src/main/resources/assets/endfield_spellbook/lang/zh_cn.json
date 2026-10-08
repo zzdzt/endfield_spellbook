@@ -66,5 +66,12 @@
   "item.endfield_spellbook.scroll_bloodwing": "驱火焚影卷轴",
   "effect.endfield_spellbook.heat_vulnerable": "灼热脆弱",
   "entity.endfield_spellbook.bloodwing": "衔火血翼",
-  "death.attack.endfield_spellbook.bloodwing": "%1$s被%2$s的衔火血翼焚尽了"
+  "death.attack.endfield_spellbook.bloodwing": "%1$s被%2$s的衔火血翼焚尽了",
+
+  "spell.endfield_spellbook.designated_subject": "指定研究对象",
+  "spell.endfield_spellbook.designated_subject.guide": "锁定一名敌人，对其施加长时间聚焦。聚焦期间，该敌人每次受到元素附着时，都会自动再附加一层同元素附着——层数增长与法术爆发加倍。同一目标只能被一名施法者聚焦，再次施法可转移或刷新聚焦",
+  "spell.endfield_spellbook.designated_subject.info.rule": "聚焦的敌人受到附着时自动附加一层；同目标后者覆盖前者",
+  "item.endfield_spellbook.scroll_designated_subject": "指定研究对象卷轴",
+  "entity.endfield_spellbook.focus_mark": "聚焦标记",
+  "effect.endfield_spellbook.focused": "聚焦"
 }

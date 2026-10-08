@@ -26,6 +26,17 @@ public class ParticleRegistry {
     public static final RegistryObject<SimpleParticleType> BLOOD_FIREFLY =
         PARTICLES.register("blood_firefly", () -> new SimpleParticleType(true));
 
+    // ========== 血雾三档（血翼体积层，装饰粒子 overrideLimiter=false 低画质可裁剪） ==========
+
+    public static final RegistryObject<SimpleParticleType> BLOOD_MIST_CORE =
+        PARTICLES.register("blood_mist_core", () -> new SimpleParticleType(false));
+
+    public static final RegistryObject<SimpleParticleType> BLOOD_MIST_OUTER =
+        PARTICLES.register("blood_mist_outer", () -> new SimpleParticleType(false));
+
+    public static final RegistryObject<SimpleParticleType> BLOOD_MIST_TRAIL =
+        PARTICLES.register("blood_mist_trail", () -> new SimpleParticleType(false));
+
     public static void register(IEventBus eventBus) {
         PARTICLES.register(eventBus);
     }

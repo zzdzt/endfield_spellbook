@@ -6,6 +6,7 @@ import com.zzdzt.endfield_spellbook.element.InkWaterfallRenderer;
 import com.zzdzt.endfield_spellbook.element.SunderbladeRenderer;
 import com.zzdzt.endfield_spellbook.element.TargetMarkRenderer;
 import com.zzdzt.endfield_spellbook.particle.BloodFireflyParticle;
+import com.zzdzt.endfield_spellbook.particle.BloodMistParticle;
 import com.zzdzt.endfield_spellbook.particle.InkZapParticle;
 import com.zzdzt.endfield_spellbook.registry.EntityRegistry;
 import com.zzdzt.endfield_spellbook.registry.ParticleRegistry;
@@ -134,6 +135,20 @@ public class ClientSetup {
         event.registerSpriteSet(
             ParticleRegistry.BLOOD_FIREFLY.get(),
             BloodFireflyParticle.Provider::new
+        );
+
+        // 血雾三档：单类 BloodMistParticle + Kind 参数区分（CORE/OUTER/TRAIL）
+        event.registerSpriteSet(
+            ParticleRegistry.BLOOD_MIST_CORE.get(),
+            set -> new BloodMistParticle.Provider(set, BloodMistParticle.Kind.CORE)
+        );
+        event.registerSpriteSet(
+            ParticleRegistry.BLOOD_MIST_OUTER.get(),
+            set -> new BloodMistParticle.Provider(set, BloodMistParticle.Kind.OUTER)
+        );
+        event.registerSpriteSet(
+            ParticleRegistry.BLOOD_MIST_TRAIL.get(),
+            set -> new BloodMistParticle.Provider(set, BloodMistParticle.Kind.TRAIL)
         );
     }
 }

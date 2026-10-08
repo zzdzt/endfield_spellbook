@@ -5,8 +5,6 @@ import com.mojang.math.Axis;
 import com.zzdzt.endfield_spellbook.EndfieldSpellbook;
 import com.zzdzt.endfield_spellbook.config.ClientConfig;
 import com.zzdzt.endfield_spellbook.config.VfxQuality;
-import com.zzdzt.endfield_spellbook.spell.gloompurge.GloompurgeMarkRenderer;
-import com.zzdzt.endfield_spellbook.spell.liquidnitrogencannon.LncProjectileRenderer;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -17,10 +15,15 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * 特效自研后处理管线（破晦阵）。
+ * 特效自研后处理管线（破晦阵 / 液氮炮 / 焚灭火环等统一调度）。
+ *
+ * 特效接入协议（技术债泛化后）：实现 {@link PostFxSnapshot}（entity + drawInto +
+ * endBatches + 可选 screen-space 钩子），实体 pass 调 {@link #enqueue}——管线零修改。
  *
  * 每帧流程（仅当本帧有特效快照时执行，队列为空零开销）：
  *   1. GlStateSnapshot.save()
@@ -50,9 +53,11 @@ public final class PipelinePost {
     private ArcaneFBO fxFBO;
     private FinalPass finalPass;
     private BloomPass bloomPass;
+    private FlameRingPass flameRingPass;
+    /** 火环专属 Pass 故障标志（P1 隔离）：只禁用火环后处理，不影响公共管线。 */
+    private boolean flameRingPassFailed;
 
-    private final List<MarkSnapshot> snapshots = new ArrayList<>(8);
-    private final List<LncSnapshot> lncSnapshots = new ArrayList<>(8);
+    private final List<PostFxSnapshot> snapshots = new ArrayList<>(8);
 
     private PipelinePost() {
     }
@@ -63,7 +68,7 @@ public final class PipelinePost {
     public static boolean isActive() {
         if (!INSTANCE.loggedActive && configEnabled() && !INSTANCE.failed) {
             INSTANCE.loggedActive = true;
-            EndfieldSpellbook.LOGGER.info("[EndfieldSpellbook] Post pipeline enabled (gloompurge)");
+            EndfieldSpellbook.LOGGER.info("[EndfieldSpellbook] Post pipeline enabled (gloompurge + lnc + flame ring)");
         }
         return configEnabled() && !INSTANCE.failed;
     }
@@ -100,14 +105,22 @@ public final class PipelinePost {
 
     // ===== 快照收集 =====
 
-    /** 破晦阵实体 pass 冻结渲染参数（每帧末尾在 AFTER_LEVEL 消费后清空）。 */
-    public static void enqueue(MarkSnapshot snapshot) {
+    /** 实体 pass 冻结渲染参数（任意 PostFxSnapshot 实现；AFTER_LEVEL 消费后清空）。 */
+    public static void enqueue(PostFxSnapshot snapshot) {
         INSTANCE.snapshots.add(snapshot);
     }
 
-    /** 液氮炮弹实体 pass 冻结渲染参数（与破晦阵共用一条管线，消费后清空）。 */
-    public static void enqueue(LncSnapshot snapshot) {
-        INSTANCE.lncSnapshots.add(snapshot);
+    /** 火环 screen-space 扭曲段的访问入口（FlameRingSnapshot 钩子用）。 */
+    static FlameRingPass flameRingPass() {
+        return INSTANCE.flameRingPass;
+    }
+
+    /**
+     * 火环 screen-space Pass 是否真实可用（P1.2）：管线启用 + 初始化成功 + 未运行期失效。
+     * 对象存在不代表可用，必须查故障标志。
+     */
+    public static boolean flameRingPassUsable() {
+        return isActive() && !INSTANCE.flameRingPassFailed && INSTANCE.flameRingPass != null;
     }
 
     // ===== 帧流程 =====
@@ -122,7 +135,7 @@ public final class PipelinePost {
 
     private void frame(RenderLevelStageEvent event) {
         // 无特效快照 → 管线整体跳过（恒等合成无意义），零开销
-        if (snapshots.isEmpty() && lncSnapshots.isEmpty()) {
+        if (snapshots.isEmpty()) {
             return;
         }
         try {
@@ -136,7 +149,6 @@ public final class PipelinePost {
             EndfieldSpellbook.LOGGER.error("[EndfieldSpellbook] Post pipeline disabled after failure", t);
         } finally {
             snapshots.clear();
-            lncSnapshots.clear();
         }
     }
 
@@ -151,17 +163,40 @@ public final class PipelinePost {
         }
         sceneFBO = new ArcaneFBO(1);
         sceneFBO.create(rt.width, rt.height);
-        fxFBO = new ArcaneFBO(2);
+        fxFBO = new ArcaneFBO(4);
         fxFBO.create(rt.width, rt.height);
         quad.init();
         finalPass = new FinalPass();
         finalPass.init();
         bloomPass = new BloomPass(quad);
         bloomPass.init(rt.width, rt.height);
+        initFlameRingPass(rt.width, rt.height);
         syncDepthFormat();
         initialized = true;
         EndfieldSpellbook.LOGGER.info("[EndfieldSpellbook] Post pipeline initialized: {}x{}, depthFormat=0x{}",
             rt.width, rt.height, Integer.toHexString(fxFBO.depthInternalFormat()));
+    }
+
+    /**
+     * 火环专属 Pass 独立故障边界（P1.1）：Shader 加载/编译/链接失败只禁用火环后处理
+     * （快照自动切换 CA0 fallback），绝不把公共管线标记为 failed。
+     */
+    private void initFlameRingPass(int width, int height) {
+        if (flameRingPassFailed) {
+            return;
+        }
+        try {
+            flameRingPass = new FlameRingPass(quad);
+            flameRingPass.init(width, height);
+        } catch (Throwable t) {
+            if (flameRingPass != null) {
+                flameRingPass.close(); // 释放半初始化资源（program/distorted）
+                flameRingPass = null;
+            }
+            flameRingPassFailed = true;
+            EndfieldSpellbook.LOGGER.error(
+                "[EndfieldSpellbook] FlameRingPass init failed — ring degrades to CA0 fallback, other effects unaffected", t);
+        }
     }
 
     /** 深度格式与主 RT 同步（主 RT 重建/光影切换时格式可能变化）。 */
@@ -189,6 +224,9 @@ public final class PipelinePost {
             self.sceneFBO.resize(rt.width, rt.height);
             self.fxFBO.resize(rt.width, rt.height);
             self.bloomPass.resize(rt.width, rt.height);
+            if (self.flameRingPass != null && !self.flameRingPassFailed) {
+                self.flameRingPass.resize(rt.width, rt.height);
+            }
             DepthCopier.invalidate();
             self.syncDepthFormat();
         } catch (Throwable t) {
@@ -223,7 +261,27 @@ public final class PipelinePost {
             // ③ 按快照重绘特效到 fxFBO（frame() 已保证队列非空）
             drawSnapshots(event, mc);
 
-            // ④ bloom
+            // ④ 快照自报的 screen-space 附加段（如火环三材质 CA 扭曲并回 CA0）：
+            //    每帧只执行第一个声明者的，与重构前 get(0) 取时语义一致。
+            //    运行期异常在本地隔离（P1.4）：标记 Pass 失效（后续帧自动切 CA0 fallback），
+            //    绝不冒泡到全局 failed；GL 状态残留由 finally 的 GlStateSnapshot.restore() 兜底，
+            //    Bloom/FinalPass 各自重新绑定目标，不在污染状态下执行。
+            for (PostFxSnapshot s : snapshots) {
+                if (s.hasScreenSpacePass()) {
+                    if (flameRingPassUsable()) {
+                        try {
+                            s.runScreenSpacePass();
+                        } catch (Throwable t) {
+                            flameRingPassFailed = true;
+                            EndfieldSpellbook.LOGGER.error(
+                                "[EndfieldSpellbook] FlameRing screen-space pass failed at runtime — disabled, ring falls back to CA0", t);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // ⑤ bloom
             int bloomTex = fxFBO.colorTexture(1);
             float strength = 0f;
             if (bloomEnabled() && bloomStrength() > 0f) {
@@ -231,7 +289,7 @@ public final class PipelinePost {
                 strength = bloomStrength();
             }
 
-            // ⑤ 合成回主 RT（fxBrightness 为防过曝主旋钮，作用于 fx 与 bloom）
+            // ⑥ 合成回主 RT（fxBrightness 为防过曝主旋钮，作用于 fx 与 bloom）
             rt.bindWrite(true);
             finalPass.render(quad, sceneFBO.colorTexture(0), fxFBO.colorTexture(0), bloomTex,
                 strength, fxBrightness());
@@ -252,44 +310,23 @@ public final class PipelinePost {
         poseStack.mulPose(Axis.YP.rotationDegrees(camera.getYRot() + 180.0F));
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
 
-        // 破晦阵（纯加算）：逐类型 endBatch 确保每个批次的 setup（绑 fxFBO）→
-        // 绘制 → teardown（绑回主RT）完整执行
-        var set = PostRenderTypes.set(depthReady);
-        for (MarkSnapshot s : snapshots) {
+        // 统一重绘：translate 由管线完成，绘制与批次归属由各快照自报
+        for (PostFxSnapshot s : snapshots) {
             poseStack.pushPose();
             poseStack.translate(
                 s.entity().getX() - camPos.x,
                 s.entity().getY() - camPos.y,
                 s.entity().getZ() - camPos.z);
-            // renderer 实例承载 fadeTick 等实例状态，从 dispatcher 反查
-            var renderer = mc.getEntityRenderDispatcher().getRenderer(s.entity());
-            if (renderer instanceof GloompurgeMarkRenderer gmr) {
-                gmr.drawForPipeline(s.entity(), s.f(), s.alpha(), s.dist(),
-                    s.shape(), poseStack, buffers, set);
-            }
+            s.drawInto(poseStack, buffers, depthReady);
             poseStack.popPose();
         }
-        buffers.endBatch(set.mark());
-        buffers.endBatch(set.ground());
-        buffers.endBatch(set.mist());
-        buffers.endBatch(set.glow());
 
-        // 液氮炮弹（纯加算）：球体/拖尾/命中环走 glow 批次
-        if (!lncSnapshots.isEmpty()) {
-            var lncSet = PostRenderTypes.set(depthReady);
-            for (LncSnapshot s : lncSnapshots) {
-                poseStack.pushPose();
-                poseStack.translate(
-                    s.entity().getX() - camPos.x,
-                    s.entity().getY() - camPos.y,
-                    s.entity().getZ() - camPos.z);
-                var renderer = mc.getEntityRenderDispatcher().getRenderer(s.entity());
-                if (renderer instanceof LncProjectileRenderer lncRenderer) {
-                    lncRenderer.drawForPipeline(s.entity(), s.f(), poseStack, buffers, lncSet.glow());
-                }
-                poseStack.popPose();
+        // 批次收尾：批次跨同类型快照共享，每种实现类型每帧只 endBatch 一次
+        Set<Class<?>> settled = new HashSet<>();
+        for (PostFxSnapshot s : snapshots) {
+            if (settled.add(s.getClass())) {
+                s.endBatches(buffers, depthReady);
             }
-            buffers.endBatch(lncSet.glow());
         }
     }
 }
