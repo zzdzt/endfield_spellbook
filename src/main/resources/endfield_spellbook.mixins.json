@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.zzdzt.endfield_spellbook.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "endfield_spellbook.refmap.json",
+  "mixins": [],
+  "client": [
+    "client.WindowResizeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

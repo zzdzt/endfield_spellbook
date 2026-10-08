@@ -1,0 +1,70 @@
+{
+  "spell.endfield_spellbook.info.duration": "持续时间: %ss",
+
+  "spell.endfield_spellbook.smouldering_fire": "焚灭",
+  "spell.endfield_spellbook.smouldering_fire.guide": "近距离横扫攻击，吸收范围内敌人的灼热附着转化为熔火；积攒 4 层熔火后下一次焚灭将获得强化，造成更高的范围伤害。如果手持近战武器，法术还会增加武器的伤害",
+  "spell.endfield_spellbook.smouldering_fire.info.enhanced": "满熔火强化: 范围 ×1.5、伤害 ×2",
+  "item.endfield_spellbook.scroll_smouldering_fire": "焚灭卷轴",
+
+  "spell.endfield_spellbook.liquid_nitrogen_cannon": "液氮大炮",
+  "spell.endfield_spellbook.liquid_nitrogen_cannon.guide": "发射一颗压缩液氮炮弹，命中敌人或障碍后以着弹点为中心产生范围法术伤害与强力击退，被命中者8秒内移动时受到正比于移动距离的伤害。",
+  "spell.endfield_spellbook.liquid_nitrogen_cannon.info.knockback": "击退力度: %s",
+  "item.endfield_spellbook.scroll_liquid_nitrogen_cannon": "液氮大炮卷轴",
+  "effect.endfield_spellbook.liquid_nitrogen_marked": "液氮标记",
+
+  "spell.endfield_spellbook.lizhi_yan": "应龙截击支援（待完成）",
+  "spell.endfield_spellbook.lizhi_yan.guide": "召唤应龙重火力支援（待完成）",
+  "item.endfield_spellbook.scroll_lizhi_yan": "应龙截击支援卷轴",
+
+  "spell.endfield_spellbook.gloompurge": "破晦阵",
+  "spell.endfield_spellbook.gloompurge.guide": "在施法点展开固定领域。领域持续期间，范围内敌人受到你造成的任意伤害时，召唤天降回声打击该敌人。回声伤害与触发伤害成正比，回声本身不会连锁触发。",
+  "death.attack.endfield_spellbook.gloompurge": "%1$s被%2$s的破晦阵净化了",
+  "entity.endfield_spellbook.gloompurge_mark": "破晦阵",
+
+  "entity.endfield_spellbook.element_ring": "元素附着",
+
+  "element.endfield_spellbook.heat": "灼热",
+  "element.endfield_spellbook.electric": "电磁",
+  "element.endfield_spellbook.cryo": "寒冷",
+  "element.endfield_spellbook.nature": "自然",
+
+  "condition.endfield_spellbook.combustion": "燃烧",
+  "condition.endfield_spellbook.electrification": "导电",
+  "condition.endfield_spellbook.corrosion": "腐蚀",
+  "condition.endfield_spellbook.frozen": "冻结",
+
+  "effect.endfield_spellbook.combustion": "燃烧",
+  "effect.endfield_spellbook.arts_vulnerable": "导电",
+  "effect.endfield_spellbook.eroded": "腐蚀",
+  "effect.endfield_spellbook.frozen_mark": "冻结",
+  "effect.endfield_spellbook.molten_fire_mark": "熔火",
+
+  "spell.endfield_spellbook.test_apply_heat": "测试·灼热附着",
+  "spell.endfield_spellbook.test_apply_electric": "测试·电磁附着",
+  "spell.endfield_spellbook.test_apply_cryo": "测试·寒冷附着",
+  "spell.endfield_spellbook.test_apply_nature": "测试·自然附着",
+  "spell.endfield_spellbook.test.info.apply": "对选中的目标施加 1 层 %s 附着",
+  "item.endfield_spellbook.scroll_test_apply_heat": "测试·灼热附着卷轴",
+  "item.endfield_spellbook.scroll_test_apply_electric": "测试·电磁附着卷轴",
+  "item.endfield_spellbook.scroll_test_apply_cryo": "测试·寒冷附着卷轴",
+  "item.endfield_spellbook.scroll_test_apply_nature": "测试·自然附着卷轴",
+
+  "spell.endfield_spellbook.sunderblade_strike": "青霆剑诀",
+  "spell.endfield_spellbook.sunderblade_strike.guide": "凝雷炁为青霆剑，插于目标脚下；再次施放时引导范围内的青霆剑依次雷击目标，每道雷击均造成电磁伤害，最后一次雷击造成6倍伤害。青霆剑不随引导消耗，存场36秒。目标有导电时，施放将消耗导电并生成至多3柄剑；无导电时，剑不足3柄可免费生成1柄。释放时范围内积攒9柄后，惊霆诀不再消耗导电，改由导电状态直接强化雷击",
+  "spell.endfield_spellbook.sunderblade_strike.info.strike": "每道雷击造成 %s 点电磁伤害",
+  "spell.endfield_spellbook.sunderblade_strike.info.finale": "最后一次雷击造成 %s 点伤害（6倍）",
+  "spell.endfield_spellbook.sunderblade_strike.info.rule": "有导电: 消耗并生成至多3柄; 无导电: 剑<3免费1柄; 满9剑后不再消耗",
+  "item.endfield_spellbook.scroll_sunderblade_strike": "青霆剑诀卷轴",
+  "entity.endfield_spellbook.sunderblade": "青霆剑",
+  "entity.endfield_spellbook.target_mark": "惊霆印记",
+  "entity.endfield_spellbook.ink_waterfall": "水墨雷瀑",
+  "entity.endfield_spellbook.phantom_blade": "幻影魔剑",
+  "entity.endfield_spellbook.flame_ring": "焚灭火环",
+
+  "spell.endfield_spellbook.bloodwing": "驱火焚影",
+  "spell.endfield_spellbook.bloodwing.guide": "召唤衔火血翼扑向目标，对小范围敌人造成灼热伤害；血翼在主目标身边盘桓，持续施加虚弱与灼热脆弱——脆弱期间目标受到的灼热伤害（含燃烧）提高。主目标倒下时，血翼会扑向附近的下一个敌人。再次施放：血翼收束爆裂，对目标造成额外灼热伤害后消散",
+  "item.endfield_spellbook.scroll_bloodwing": "驱火焚影卷轴",
+  "effect.endfield_spellbook.heat_vulnerable": "灼热脆弱",
+  "entity.endfield_spellbook.bloodwing": "衔火血翼",
+  "death.attack.endfield_spellbook.bloodwing": "%1$s被%2$s的衔火血翼焚尽了"
+}

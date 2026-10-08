@@ -1,0 +1,70 @@
+{
+  "spell.endfield_spellbook.info.duration": "Duration: %ss",
+
+  "spell.endfield_spellbook.smouldering_fire": "Smouldering Fire",
+  "spell.endfield_spellbook.smouldering_fire.guide": "Swing in a close range arc, absorbing Heat infliction from enemies in range and converting it into Molten Fire; with 4 stacks of Molten Fire, the next cast is empowered with greater range and damage. If holding a melee weapon, the spell also increases weapon damage.",
+  "spell.endfield_spellbook.smouldering_fire.info.enhanced": "Empowered (Full Molten Fire): Range x1.5, Damage x2",
+  "item.endfield_spellbook.scroll_smouldering_fire": "Scroll of Smouldering Fire",
+
+  "spell.endfield_spellbook.liquid_nitrogen_cannon": "Liquid Nitrogen Cannon",
+  "spell.endfield_spellbook.liquid_nitrogen_cannon.guide": "Fire a compressed liquid nitrogen shell. On impact, deal area magic damage and a powerful knockback around the impact point. Hit enemies take damage proportional to their movement distance for 8 seconds.",
+  "spell.endfield_spellbook.liquid_nitrogen_cannon.info.knockback": "Knockback Power: %s",
+  "item.endfield_spellbook.scroll_liquid_nitrogen_cannon": "Scroll of Liquid Nitrogen Cannon",
+  "effect.endfield_spellbook.liquid_nitrogen_marked": "Nitrogen Marked",
+
+  "spell.endfield_spellbook.lizhi_yan": "Yinglong Intercept Support (In Development)",
+  "spell.endfield_spellbook.lizhi_yan.guide": "Summon Yinglong Heavy Fire Support (In Development)",
+  "item.endfield_spellbook.scroll_lizhi_yan": "Scroll of Yinglong Intercept",
+
+  "entity.endfield_spellbook.gloompurge_mark": "Gloompurge Mark",
+  "spell.endfield_spellbook.gloompurge": "Gloompurge Domain",
+  "spell.endfield_spellbook.gloompurge.guide": "Unfolds a fixed domain at the cast point. While it lasts, any damage you deal to enemies inside summons an echoing strike from above. Echo damage scales with the triggering damage and your spell power; echoes never chain-trigger.",
+  "death.attack.endfield_spellbook.gloompurge": "%1$s was purified by %2$s's Gloompurge",
+
+  "entity.endfield_spellbook.element_ring": "Arts Infliction",
+
+  "element.endfield_spellbook.heat": "Heat",
+  "element.endfield_spellbook.electric": "Electric",
+  "element.endfield_spellbook.cryo": "Cryo",
+  "element.endfield_spellbook.nature": "Nature",
+
+  "condition.endfield_spellbook.combustion": "Combustion",
+  "condition.endfield_spellbook.electrification": "Electrification",
+  "condition.endfield_spellbook.corrosion": "Corrosion",
+  "condition.endfield_spellbook.frozen": "Solidification",
+
+  "effect.endfield_spellbook.combustion": "Combustion",
+  "effect.endfield_spellbook.arts_vulnerable": "Electrification",
+  "effect.endfield_spellbook.eroded": "Corrosion",
+  "effect.endfield_spellbook.frozen_mark": "Solidification",
+  "effect.endfield_spellbook.molten_fire_mark": "Molten Fire",
+
+  "spell.endfield_spellbook.test_apply_heat": "Test: Heat Infliction",
+  "spell.endfield_spellbook.test_apply_electric": "Test: Electric Infliction",
+  "spell.endfield_spellbook.test_apply_cryo": "Test: Cryo Infliction",
+  "spell.endfield_spellbook.test_apply_nature": "Test: Nature Infliction",
+  "spell.endfield_spellbook.test.info.apply": "Applies 1 stack of %s infliction to the target",
+  "item.endfield_spellbook.scroll_test_apply_heat": "Test: Heat Infliction Scroll",
+  "item.endfield_spellbook.scroll_test_apply_electric": "Test: Electric Infliction Scroll",
+  "item.endfield_spellbook.scroll_test_apply_cryo": "Test: Cryo Infliction Scroll",
+  "item.endfield_spellbook.scroll_test_apply_nature": "Test: Nature Infliction Scroll",
+
+  "spell.endfield_spellbook.sunderblade_strike": "Sunderblade Strike",
+  "spell.endfield_spellbook.sunderblade_strike.guide": "Condenses thunder into Sunderblades planted at the target's feet; casting again guides nearby Sunderblades to strike the target one after another, each strike dealing Arts damage - the final strike deals 6x damage. Sunderblades persist for 36s and are not consumed. With Electrification on the target, consumes it to spawn up to 3 blades; without Electrification, spawns 1 free blade when below 3. When 9 blades are within range at cast, the spell no longer consumes Electrification - instead the status itself empowers the strikes",
+  "spell.endfield_spellbook.sunderblade_strike.info.strike": "Each strike deals %s Arts damage",
+  "spell.endfield_spellbook.sunderblade_strike.info.finale": "The final strike deals %s damage (6x)",
+  "spell.endfield_spellbook.sunderblade_strike.info.rule": "With Electrification: consume to spawn up to 3 blades; without: 1 free blade below 3; no longer consumed at 9 blades",
+  "item.endfield_spellbook.scroll_sunderblade_strike": "Sunderblade Strike Scroll",
+  "entity.endfield_spellbook.sunderblade": "Sunderblade",
+  "entity.endfield_spellbook.target_mark": "Sunderbolt Mark",
+  "entity.endfield_spellbook.ink_waterfall": "Ink Thunder Waterfall",
+  "entity.endfield_spellbook.phantom_blade": "Phantom Blade",
+  "entity.endfield_spellbook.flame_ring": "Flame Ring",
+
+  "spell.endfield_spellbook.bloodwing": "Fire-Driven Bloodwing",
+  "spell.endfield_spellbook.bloodwing.guide": "Summon a fire-bearing bloodwing that dives onto the target, dealing Heat damage to enemies in a small area. The bloodwing orbits its primary target, applying Weakness and Heat Vulnerability - Heat damage taken (including Combustion) is increased. When the primary target falls, the bloodwing pounces on the next enemy nearby. Cast again: the bloodwing converges and bursts, dealing extra Heat damage before dispersing.",
+  "item.endfield_spellbook.scroll_bloodwing": "Scroll of Fire-Driven Bloodwing",
+  "effect.endfield_spellbook.heat_vulnerable": "Heat Vulnerability",
+  "entity.endfield_spellbook.bloodwing": "Fire Bloodwing",
+  "death.attack.endfield_spellbook.bloodwing": "%1$s was burnt to ash by %2$s's Bloodwing"
+}
