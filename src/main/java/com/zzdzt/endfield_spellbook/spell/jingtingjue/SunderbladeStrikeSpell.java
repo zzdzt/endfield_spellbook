@@ -42,8 +42,8 @@ import java.util.Optional;
  *       范围外的剑不纳入；满 9 剑的定义 = 释放时范围内剑数 ≥ 9</li>
  *   <li>剑 ≥9：不产剑、不消耗导电 → 导电异常保留，伤害走正常导电易伤（WP1 乘区 +12~24%）</li>
  *   <li>伤害解绑：首击落雷 ×1，每柄剑引导雷各 ×1，收尾最后一击 ×6（原作「最后一次雷击造成6倍伤害」），
- *       伤害在各自雷击帧结算（演出帧 = 命中帧）；首击/收尾为落点 {@link #AOE_RADIUS} 格群体伤害，
- *       引导雷单体</li>
+ *       伤害在各自雷击帧结算（演出帧 = 命中帧）；首击/收尾为落点 {@link #AOE_RADIUS} 格群体伤害
+ *       （收尾火帧再次定向目标当前位置），引导雷单体</li>
  *   <li>剑不消耗：36s 存场，反复施放累积（越战越勇）</li>
  *   <li>tier（红闪/雷瀑密度档）= min(4, 范围内剑数/2)</li>
  * </ul>
@@ -175,10 +175,10 @@ public class SunderbladeStrikeSpell extends AbstractSpell {
 
         long now = serverLevel.getGameTime();
 
-        // 目标脚下水墨印记（每次施放刷新；贴图环，最小 1.3 保证人形目标观感）
+        // 目标脚下水墨印记（每次施放刷新；始终跟随主目标，最小 1.3 保证人形目标观感）
         serverLevel.addFreshEntity(new TargetMarkEntity(
             EntityRegistry.TARGET_MARK.get(), serverLevel,
-            target.position(), Math.max(1.3f, target.getBbWidth() * 1.0f), 40));
+            target, Math.max(1.3f, target.getBbWidth() * 1.0f), 40));
 
         // ① 首击：瀑布雷瀑 + 落点 1 格群体伤害
         ThunderStrikeHelper.scheduleFirstStrike(serverLevel, target.position(), tier, ThunderCastCurve.FIRST_STRIKE_DELAY);
@@ -197,10 +197,10 @@ public class SunderbladeStrikeSpell extends AbstractSpell {
             delay += ThunderCastCurve.GUIDANCE_STEP / ThunderCastCurve.GUIDANCE_SPEED;
         }
 
-        // ③ 收尾最后一击 ×6（红芯雷瀑 + 落点 1 格群体伤害）
+        // ③ 收尾最后一击 ×6（红芯雷瀑 + 群体伤害，火帧时再次定向目标当前位置）
         long finaleAt = Math.round(delay + ThunderCastCurve.FINALE_GAP / ThunderCastCurve.GUIDANCE_SPEED);
-        ThunderStrikeHelper.scheduleFinale(serverLevel, target.position(), tier, finaleAt);
-        scheduleAoEStrikeDamage(serverLevel, entity, target.position(), STRIKE_BASE * spellPower * FINALE_MULT, finaleAt);
+        ThunderStrikeHelper.scheduleFinale(serverLevel, target, target.position(), tier, finaleAt);
+        scheduleAoEStrikeDamage(serverLevel, entity, target, target.position(), STRIKE_BASE * spellPower * FINALE_MULT, finaleAt);
 
         super.onCast(level, spellLevel, entity, castSource, playerMagicData);
     }
@@ -241,23 +241,33 @@ public class SunderbladeStrikeSpell extends AbstractSpell {
     /** 排入延迟队列：在雷击帧对落点周围 {@link #AOE_RADIUS} 格结算群体伤害（判定沿用旧水墨雷击实体模式）。 */
     private void scheduleAoEStrikeDamage(ServerLevel level, LivingEntity caster, Vec3 center,
                                          float amount, long delay) {
-        ThunderStrikeHelper.schedule(level, delay, () -> {
-            var damageSource = this.getDamageSource(caster);
-            AABB damageBox = new AABB(
-                center.x - AOE_RADIUS, center.y - 0.5, center.z - AOE_RADIUS,
-                center.x + AOE_RADIUS, center.y + 2.5, center.z + AOE_RADIUS);
-            List<LivingEntity> victims = level.getEntitiesOfClass(LivingEntity.class, damageBox,
-                e -> e != caster &&
-                     e.isAlive() &&
-                     e.isPickable() &&
-                     !Utils.shouldHealEntity(caster, e) &&
-                     e.distanceToSqr(center.x, center.y, center.z) <= AOE_RADIUS * AOE_RADIUS);
-            for (LivingEntity victim : victims) {
-                // 多段连击（首击/引导雷/收尾接踵而至）：先清无敌帧，防本段被 i-frame 吞伤
-                victim.invulnerableTime = 0;
-                DamageSources.applyDamage(victim, amount, damageSource);
-            }
-        });
+        ThunderStrikeHelper.schedule(level, delay, () -> applyAoEDamage(level, caster, center, amount));
+    }
+
+    /** 同上，但火帧时再次定向目标当前位置；目标已死/移除则退回 fallbackPos。收尾雷专用。 */
+    private void scheduleAoEStrikeDamage(ServerLevel level, LivingEntity caster, LivingEntity target,
+                                         Vec3 fallbackPos, float amount, long delay) {
+        ThunderStrikeHelper.schedule(level, delay, () ->
+            applyAoEDamage(level, caster, target.isAlive() ? target.position() : fallbackPos, amount));
+    }
+
+    /** 以 center 为中心 {@link #AOE_RADIUS} 格群体伤害：排除施法者/友方/不可选目标，逐个清无敌帧后结算。 */
+    private void applyAoEDamage(ServerLevel level, LivingEntity caster, Vec3 center, float amount) {
+        var damageSource = this.getDamageSource(caster);
+        AABB damageBox = new AABB(
+            center.x - AOE_RADIUS, center.y - 0.5, center.z - AOE_RADIUS,
+            center.x + AOE_RADIUS, center.y + 2.5, center.z + AOE_RADIUS);
+        List<LivingEntity> victims = level.getEntitiesOfClass(LivingEntity.class, damageBox,
+            e -> e != caster &&
+                 e.isAlive() &&
+                 e.isPickable() &&
+                 !Utils.shouldHealEntity(caster, e) &&
+                 e.distanceToSqr(center.x, center.y, center.z) <= AOE_RADIUS * AOE_RADIUS);
+        for (LivingEntity victim : victims) {
+            // 多段连击（首击/引导雷/收尾接踵而至）：先清无敌帧，防本段被 i-frame 吞伤
+            victim.invulnerableTime = 0;
+            DamageSources.applyDamage(victim, amount, damageSource);
+        }
     }
 
     @Nullable

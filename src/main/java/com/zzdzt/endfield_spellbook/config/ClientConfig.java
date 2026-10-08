@@ -22,12 +22,16 @@ public class ClientConfig {
     static {
         CLIENT_BUILDER.push("vfx");
         VFX_QUALITY = CLIENT_BUILDER
-            .comment("Visual effect quality tier (affects spell visuals only, no gameplay impact).",
+            .comment("Visual effect quality tier (spell geometry only - no gameplay impact).",
+                     "Edits apply instantly, no restart needed.",
                      "HIGH   = all layers, full tessellation (default; identical to pre-LOD appearance)",
                      "MEDIUM = beyond 32 blocks: drop glow layers, halve membrane segments;",
                      "         beyond 56 blocks: halve energy pillars",
                      "LOW    = drop glow layers entirely; membrane at half segments;",
-                     "         pillars at 1/3 beyond 24 blocks")
+                     "         pillars at 1/3 beyond 24 blocks; also disables post bloom",
+                     "         (post.bloomStrength is ignored)",
+                     "Note: post.* keys below control the bloom pipeline independently.",
+                     "Particle counts are not affected by this tier.")
             .defineEnum("quality", VfxQuality.HIGH);
         CLIENT_BUILDER.pop();
 

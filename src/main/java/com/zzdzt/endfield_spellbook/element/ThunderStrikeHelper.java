@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -126,10 +127,12 @@ public final class ThunderStrikeHelper {
         });
     }
 
-    /** 收尾：红芯雷瀑 + 红闪（tier≥3，红闪仅出现在收尾）+ 墨黑晶刺放射 + 双音效（爆炸 + 雷声）。 */
-    public static void scheduleFinale(ServerLevel level, Vec3 targetPos, int tier, long delay) {
+    /** 收尾：红芯雷瀑 + 红闪（tier≥3，红闪仅出现在收尾）+ 墨黑晶刺放射 + 双音效（爆炸 + 雷声）。
+     *  火帧时再次定向目标当前位置；目标已死/移除则退回 fallbackPos。 */
+    public static void scheduleFinale(ServerLevel level, LivingEntity target, Vec3 fallbackPos, int tier, long delay) {
         schedule(level, delay, () -> {
             RandomSource rand = level.getRandom();
+            Vec3 targetPos = target.isAlive() ? target.position() : fallbackPos;
             level.addFreshEntity(new InkWaterfallEntity(
                 EntityRegistry.INK_WATERFALL.get(), level, targetPos,
                 FINALE_HEIGHT, FINALE_SPREAD, tier));
