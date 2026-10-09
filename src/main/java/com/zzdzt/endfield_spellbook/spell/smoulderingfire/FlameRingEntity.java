@@ -71,8 +71,10 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
     private static final int SMALL_FLAME_CHANCE = 3;
     /** 每 tick 沿已揭示弧随机撒的余烬数。 */
     private static final int EMBER_PER_TICK = 2;
-    /** 满环燃烧期每 tick 补充火苗数。 */
-    private static final int BURN_FLAME_PER_TICK = 2;
+    /** 满环燃烧期每 tick 补充火苗数（四点分布沿圆周推进，避免每帧随机空洞）。 */
+    private static final int BURN_FLAME_PER_TICK = 4;
+    /** 满环火苗每 tick 沿圆周前进的角度，和实体 ID 无关，保持整体流向稳定。 */
+    private static final float BURN_FLAME_PHASE_PER_TICK = 37f;
 
     public FlameRingEntity(EntityType<?> type, Level level) {
         super(type, level);
@@ -159,9 +161,13 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
                 spawnRingFlame(center, fwd, right, theta, radius, dir);
             }
         } else if (burning) {
-            // 满环燃烧期：随机位置补火苗，维持整环燃烧
+            // P4.4：满环燃烧时以四个等距采样点补火，整体随时间沿环向推进。
+            // 位置规律稳定，只有单个火苗的径向抖动与大小仍保留轻微随机性。
+            float burnStart = life - FlameRingCastCurve.FADE_TICKS - FlameRingCastCurve.BURN_TICKS;
+            float burnElapsed = tickCount - burnStart;
+            float phase = burnElapsed * BURN_FLAME_PHASE_PER_TICK;
             for (int i = 0; i < BURN_FLAME_PER_TICK; i++) {
-                float theta = th0 + dir * 360f * random.nextFloat();
+                float theta = th0 + dir * (360f * (i + 0.5f) / BURN_FLAME_PER_TICK + phase);
                 spawnRingFlame(center, fwd, right, theta, radius, dir);
             }
         }
