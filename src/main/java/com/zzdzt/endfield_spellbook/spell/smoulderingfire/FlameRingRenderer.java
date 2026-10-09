@@ -146,7 +146,7 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             ? Mth.clamp((age - burnStart) / FlameRingCastCurve.BURN_TICKS, 0f, 1f)
             : 0f;
         float fullRingPulse = fullRingBurning
-            ? Mth.sin(burnProgress * ((float) Math.PI * 2f))
+            ? Mth.sin(burnProgress * (float) Math.PI)
             : 0f;
 
         // 16 帧参考：前段维持满环亮度，后段再随片段脱离逐渐淡出。
