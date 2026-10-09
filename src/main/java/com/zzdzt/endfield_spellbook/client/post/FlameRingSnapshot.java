@@ -17,20 +17,28 @@ public record FlameRingSnapshot(FlameRingEntity entity, float f) implements Post
 
     @Override
     public void drawInto(PoseStack poseStack, MultiBufferSource.BufferSource buffers, boolean depthReady) {
-        var flameSet = PostRenderTypes.setFlameRing(depthReady);
         var renderer = Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(entity);
         if (renderer instanceof FlameRingRenderer frRenderer) {
-            frRenderer.drawForPipeline(entity, f, poseStack, buffers, flameSet);
+            // 单一分派（P1.3）：Pass 可用 → 三材质写 CA1/2/3；不可用 → 三层直写公共 CA0
+            //（FinalPass 只合成 CA0，跳过扭曲 Pass 还画 CA1-3 的话环会不可见）。
+            var set = PipelinePost.flameRingPassUsable()
+                ? PostRenderTypes.setFlameRing(depthReady)
+                : PostRenderTypes.setFlameRingFallback(depthReady);
+            frRenderer.drawForPipeline(entity, f, poseStack, buffers, set);
         }
     }
 
     @Override
     public void endBatches(MultiBufferSource.BufferSource buffers, boolean depthReady) {
-        // 逐批次 endBatch：确保每层 setup（绑各自 CA）→ 绘制 → teardown 完整执行
-        var flameSet = PostRenderTypes.setFlameRing(depthReady);
-        buffers.endBatch(flameSet.outer());
-        buffers.endBatch(flameSet.body());
-        buffers.endBatch(flameSet.core());
+        // 与 drawInto 同帧同判定（可用性标志只在 init/step④ 翻转，③ 阶段恒定），
+        // 保证结束的正是本次实际使用的批次
+        var set = PipelinePost.flameRingPassUsable()
+            ? PostRenderTypes.setFlameRing(depthReady)
+            : PostRenderTypes.setFlameRingFallback(depthReady);
+        // 逐批次 endBatch：确保每层 setup（绑各自目标附件）→ 绘制 → teardown 完整执行
+        buffers.endBatch(set.outer());
+        buffers.endBatch(set.body());
+        buffers.endBatch(set.core());
     }
 
     @Override

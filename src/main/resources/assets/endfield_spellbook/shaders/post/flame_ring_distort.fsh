@@ -85,9 +85,10 @@ void main() {
 
     // P3：先沿环向流动，再做小尺度噪声扭曲。三层的流量不同，
     // 核心更稳定、外焰更“翻卷”。
-    vec2 uvOuter = flowUv(uv, tangent, texel.x * strength * 6.0, 0.95);
-    vec2 uvBody  = flowUv(uv, tangent, texel.x * strength * 4.5, 1.10);
-    vec2 uvCore  = flowUv(uv, tangent, texel.x * strength * 3.0, 1.34);
+    // P4.3：外焰承担最多的边缘翻卷；主焰控制在中等强度，炽核维持锐利连续。
+    vec2 uvOuter = flowUv(uv, tangent, texel.x * strength * 7.4, 0.95);
+    vec2 uvBody  = flowUv(uv, tangent, texel.x * strength * 4.8, 1.10);
+    vec2 uvCore  = flowUv(uv, tangent, texel.x * strength * 2.8, 1.34);
 
     vec4 outer = texture(outerTex, uvOuter);
     vec4 body  = texture(bodyTex,  uvBody);
@@ -110,7 +111,12 @@ void main() {
                      texture(outerTex, uv - vec2(texel.x, 0.0)).a);
     float edgeY = abs(texture(outerTex, uv + vec2(0.0, texel.y)).a -
                      texture(outerTex, uv - vec2(0.0, texel.y)).a);
-    float edgeBurn = clamp((edgeX + edgeY) * 2.8, 0.0, 1.0);
+    float edgeNoise = fbm(uv * vec2(43.0, 25.0)
+        + vec2(time * 1.45, -time * 1.12));
+    float edgeFlicker = 0.72 + 0.58 * edgeNoise;
+    // Edge burn 保持局部且受当前外焰 alpha 门控：透明区域不会因噪声自行发红。
+    float edgeBurn = clamp((edgeX + edgeY) * 2.8, 0.0, 1.0)
+        * edgeFlicker * outer.a;
 
     float flicker = 0.94 + 0.06 * noise2d(uv * vec2(17.0, 11.0) + time * 2.1);
     vec3 rgb = (outerRgb + bodyRgb + coreRgb + vec3(1.0, 0.38, 0.12) * edgeBurn * 0.42

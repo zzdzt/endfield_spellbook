@@ -9,6 +9,7 @@ import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
@@ -72,9 +73,6 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
     private static final int EMBER_PER_TICK = 2;
     /** 满环燃烧期每 tick 补充火苗数。 */
     private static final int BURN_FLAME_PER_TICK = 2;
-    /** 溃散期基础每 tick 火星数（随溃散进度加码）。 */
-    private static final int BURST_BASE = 3;
-    private static final int BURST_EXTRA = 4;
 
     public FlameRingEntity(EntityType<?> type, Level level) {
         super(type, level);
@@ -129,6 +127,7 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
         if (tickCount >= life - 1) return;
 
         float dir = Math.signum(getSweepAngle());
+        if (dir == 0f) dir = 1f;
         float radius = getRadius();
         float arcPerDeg = radius * (float) (Math.PI / 180);
 
@@ -146,7 +145,8 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
         // 环头 = 剑尖（斜面弧线上的当前揭示位置）
         float headTheta = th0 + dir * deg;
         Vec3 head = pointOnArc(center, fwd, right, headTheta, radius);
-        Vec3 tangent = arcTangent(fwd, right, headTheta);
+        // 环头火星必须与剑扫掠方向一致；镜像施法时不能沿反方向甩星。
+        Vec3 tangent = arcTangent(fwd, right, headTheta).scale(dir);
 
         // ① 环上火苗：按固定弧距排布在新揭示的弧段上——火苗排成环，环自然成立
         if (revealing) {
@@ -174,6 +174,15 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
                 tangent.x * 0.1, 0.05, tangent.z * 0.1);
         }
 
+        // P4.2：闭环后将最初的收尾点保留为视觉焦点，满环燃烧期间每隔一 tick 补充短促的火焰与余烬。
+        // 不改变几何揭示进度，也不额外延长 FlameRingCastCurve 的 4 tick 满环燃烧时长。
+        if (burning && (tickCount & 1) == 0) {
+            level().addParticle(ParticleTypes.FLAME, head.x, head.y, head.z,
+                tangent.x * 0.045, 0.025, tangent.z * 0.045);
+            level().addParticle(ParticleHelper.EMBERS, head.x, head.y, head.z,
+                tangent.x * 0.13, 0.055, tangent.z * 0.13);
+        }
+
         // ③ 余烬：沿已揭示弧随机撒（ISS 的贝塞尔撒星，曲线换成整条环弧）
         if (revealing || burning) {
             for (int i = 0; i < EMBER_PER_TICK; i++) {
@@ -191,18 +200,71 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
                 tangent.x * speed, 0.12 + random.nextFloat() * 0.15, tangent.z * speed);
         }
 
-        // ⑤ 溃散期：整环碎裂——切向速度逐 tick 加码，火星流甩散
+        // ⑤ P4.1 溃散期：使用与几何 Renderer 相同的 32 个稳定片段槽。
+        // 火星从各片段的真实脱离位置出发，方向、位移与拉伸曲线都由 FlameRingBreakup 共享。
         if (tickCount >= life - FlameRingCastCurve.FADE_TICKS) {
-            float d = (tickCount - (life - FlameRingCastCurve.FADE_TICKS)) / (float) FlameRingCastCurve.FADE_TICKS;
-            int n = BURST_BASE + (int) (d * BURST_EXTRA);
-            for (int i = 0; i < n; i++) {
-                float theta = th0 + dir * 360f * random.nextFloat();
-                Vec3 p = pointOnArc(center, fwd, right, theta, radius);
-                Vec3 t2 = arcTangent(fwd, right, theta);
-                float speed = (0.9f + random.nextFloat() * 1.4f) * (0.7f + d);
+            float fadeStart = life - FlameRingCastCurve.FADE_TICKS;
+            float d = Mth.clamp((tickCount - fadeStart) / (float) FlameRingCastCurve.FADE_TICKS, 0f, 1f);
+            float previousD = Mth.clamp((tickCount - 1f - fadeStart)
+                / (float) FlameRingCastCurve.FADE_TICKS, 0f, 1f);
+            Vec3 planeNormal = fwd.cross(right).normalize();
+
+            // 参考帧 10–12：环体开始裂解时，收尾剑锋继续甩出少量切向火星；
+            // 到 13–16 的衰减段逐步停止，避免头部亮点在其他环段消失后突兀残留。
+            float headFade = 1f - FlameRingBreakup.smoothstep(0.35f, 0.88f, d);
+            if (headFade > 0.08f) {
                 level().addParticle(ParticleHelper.FIERY_SPARKS,
-                    p.x, p.y, p.z,
-                    t2.x * speed, 0.1 + random.nextFloat() * 0.2, t2.z * speed);
+                    head.x, head.y, head.z,
+                    tangent.x * (0.42 + 0.38 * headFade),
+                    tangent.y * (0.42 + 0.38 * headFade) + 0.10 + planeNormal.y * 0.05,
+                    tangent.z * (0.42 + 0.38 * headFade));
+                if ((tickCount & 1) == 0 && headFade > 0.30f) {
+                    level().addParticle(ParticleHelper.EMBERS, head.x, head.y, head.z,
+                        tangent.x * 0.16, tangent.y * 0.16 + 0.04, tangent.z * 0.16);
+                }
+            }
+
+            for (int fragment = 0; fragment < FlameRingBreakup.FRAGMENT_COUNT; fragment++) {
+                float progress = FlameRingBreakup.progress(d, fragment, getId());
+                float previousProgress = FlameRingBreakup.progress(previousD, fragment, getId());
+                if (progress <= 0f) continue;
+
+                float theta = th0 + dir * 360f * FlameRingBreakup.fragmentCenter(fragment);
+                Vec3 original = pointOnArc(center, fwd, right, theta, radius);
+                Vec3 radial = radial(fwd, right, theta);
+                Vec3 fragmentTangent = arcTangent(fwd, right, theta).scale(dir);
+                Vec3 released = original
+                    .add(fragmentTangent.scale(FlameRingBreakup.tangentialDistance(progress, fragment, getId())))
+                    .add(radial.scale(FlameRingBreakup.radialDistance(progress, fragment, getId())))
+                    .add(planeNormal.scale(FlameRingBreakup.normalDistance(progress, fragment, getId())));
+
+                // 每个片段在开始脱离时只触发一次主火星，杜绝每 tick 重复整圈随机爆发。
+                if (progress >= 0.02f && previousProgress < 0.02f) {
+                    float speed = 0.95f + FlameRingBreakup.hash01(fragment, 5, getId()) * 1.10f;
+                    float radialKick = (FlameRingBreakup.hash01(fragment, 6, getId()) - 0.5f) * 0.42f;
+                    level().addParticle(ParticleHelper.FIERY_SPARKS,
+                        released.x, released.y, released.z,
+                        fragmentTangent.x * speed + radial.x * radialKick,
+                        fragmentTangent.y * speed + 0.12 + planeNormal.y * 0.08,
+                        fragmentTangent.z * speed + radial.z * radialKick);
+                }
+
+                // 中段持续少量喷出同方向火星，形成片段拉长后的火流；尾段转为稀疏余烬。
+                if (progress > 0.18f && progress < 0.86f
+                    && FlameRingBreakup.hash01(fragment, 7, getId()) < 0.40f) {
+                    float speed = 0.65f + 0.85f * FlameRingBreakup.travel(progress);
+                    level().addParticle(ParticleHelper.FIERY_SPARKS,
+                        released.x, released.y, released.z,
+                        fragmentTangent.x * speed, fragmentTangent.y * speed + 0.10 + planeNormal.y * 0.05,
+                        fragmentTangent.z * speed);
+                }
+                if (progress > 0.55f && progress < 0.94f
+                    && FlameRingBreakup.hash01(fragment, 8, getId()) < 0.18f) {
+                    level().addParticle(ParticleHelper.EMBERS,
+                        released.x, released.y, released.z,
+                        fragmentTangent.x * 0.22, fragmentTangent.y * 0.22 + 0.035,
+                        fragmentTangent.z * 0.22);
+                }
             }
         }
     }
@@ -244,6 +306,12 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
     private static Vec3 arcTangent(Vec3 fwd, Vec3 right, float thetaDeg) {
         double rad = Math.toRadians(thetaDeg);
         return fwd.scale(-Math.sin(rad)).add(right.scale(Math.cos(rad))).normalize();
+    }
+
+    /** 斜面环线在 θ 处的径向（弧面内，指向环外；与 FlameRingRenderer.radial 同式）。 */
+    private static Vec3 radial(Vec3 fwd, Vec3 right, float thetaDeg) {
+        double rad = Math.toRadians(thetaDeg);
+        return fwd.scale(Math.cos(rad)).add(right.scale(Math.sin(rad))).normalize();
     }
 
     public float getRadius() {

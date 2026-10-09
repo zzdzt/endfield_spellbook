@@ -54,6 +54,8 @@ public final class PipelinePost {
     private FinalPass finalPass;
     private BloomPass bloomPass;
     private FlameRingPass flameRingPass;
+    /** 火环专属 Pass 故障标志（P1 隔离）：只禁用火环后处理，不影响公共管线。 */
+    private boolean flameRingPassFailed;
 
     private final List<PostFxSnapshot> snapshots = new ArrayList<>(8);
 
@@ -113,6 +115,14 @@ public final class PipelinePost {
         return INSTANCE.flameRingPass;
     }
 
+    /**
+     * 火环 screen-space Pass 是否真实可用（P1.2）：管线启用 + 初始化成功 + 未运行期失效。
+     * 对象存在不代表可用，必须查故障标志。
+     */
+    public static boolean flameRingPassUsable() {
+        return isActive() && !INSTANCE.flameRingPassFailed && INSTANCE.flameRingPass != null;
+    }
+
     // ===== 帧流程 =====
 
     @SubscribeEvent
@@ -160,12 +170,33 @@ public final class PipelinePost {
         finalPass.init();
         bloomPass = new BloomPass(quad);
         bloomPass.init(rt.width, rt.height);
-        flameRingPass = new FlameRingPass(quad);
-        flameRingPass.init(rt.width, rt.height);
+        initFlameRingPass(rt.width, rt.height);
         syncDepthFormat();
         initialized = true;
         EndfieldSpellbook.LOGGER.info("[EndfieldSpellbook] Post pipeline initialized: {}x{}, depthFormat=0x{}",
             rt.width, rt.height, Integer.toHexString(fxFBO.depthInternalFormat()));
+    }
+
+    /**
+     * 火环专属 Pass 独立故障边界（P1.1）：Shader 加载/编译/链接失败只禁用火环后处理
+     * （快照自动切换 CA0 fallback），绝不把公共管线标记为 failed。
+     */
+    private void initFlameRingPass(int width, int height) {
+        if (flameRingPassFailed) {
+            return;
+        }
+        try {
+            flameRingPass = new FlameRingPass(quad);
+            flameRingPass.init(width, height);
+        } catch (Throwable t) {
+            if (flameRingPass != null) {
+                flameRingPass.close(); // 释放半初始化资源（program/distorted）
+                flameRingPass = null;
+            }
+            flameRingPassFailed = true;
+            EndfieldSpellbook.LOGGER.error(
+                "[EndfieldSpellbook] FlameRingPass init failed — ring degrades to CA0 fallback, other effects unaffected", t);
+        }
     }
 
     /** 深度格式与主 RT 同步（主 RT 重建/光影切换时格式可能变化）。 */
@@ -193,7 +224,9 @@ public final class PipelinePost {
             self.sceneFBO.resize(rt.width, rt.height);
             self.fxFBO.resize(rt.width, rt.height);
             self.bloomPass.resize(rt.width, rt.height);
-            self.flameRingPass.resize(rt.width, rt.height);
+            if (self.flameRingPass != null && !self.flameRingPassFailed) {
+                self.flameRingPass.resize(rt.width, rt.height);
+            }
             DepthCopier.invalidate();
             self.syncDepthFormat();
         } catch (Throwable t) {
@@ -230,9 +263,20 @@ public final class PipelinePost {
 
             // ④ 快照自报的 screen-space 附加段（如火环三材质 CA 扭曲并回 CA0）：
             //    每帧只执行第一个声明者的，与重构前 get(0) 取时语义一致。
+            //    运行期异常在本地隔离（P1.4）：标记 Pass 失效（后续帧自动切 CA0 fallback），
+            //    绝不冒泡到全局 failed；GL 状态残留由 finally 的 GlStateSnapshot.restore() 兜底，
+            //    Bloom/FinalPass 各自重新绑定目标，不在污染状态下执行。
             for (PostFxSnapshot s : snapshots) {
                 if (s.hasScreenSpacePass()) {
-                    s.runScreenSpacePass();
+                    if (flameRingPassUsable()) {
+                        try {
+                            s.runScreenSpacePass();
+                        } catch (Throwable t) {
+                            flameRingPassFailed = true;
+                            EndfieldSpellbook.LOGGER.error(
+                                "[EndfieldSpellbook] FlameRing screen-space pass failed at runtime — disabled, ring falls back to CA0", t);
+                        }
+                    }
                     break;
                 }
             }

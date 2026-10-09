@@ -116,6 +116,18 @@ public final class PostRenderTypes extends RenderStateShard {
         postAdditiveToFlame("flame_ring_post_body_nd",  FLAME_RING, true, false, FLAME_BODY_OUTPUT),
         postAdditiveToFlame("flame_ring_post_core_nd",  FLAME_RING, true, false, FLAME_CORE_OUTPUT));
 
+    // FlameRingPass 不可用时的 CA0 直写降级组（P1）：FinalPass 只合成 CA0，
+    // 跳过扭曲 Pass 的话必须把火环直接加算进 CA0 才可见；bloom 仍然生效。
+    private static final FlameRingRenderTypeSet FLAME_FALLBACK_DEPTH_SET = new FlameRingRenderTypeSet(
+        postAdditiveToFlame("flame_ring_fallback_outer", FLAME_RING, true, true, FX_OUTPUT),
+        postAdditiveToFlame("flame_ring_fallback_body",  FLAME_RING, true, true, FX_OUTPUT),
+        postAdditiveToFlame("flame_ring_fallback_core",  FLAME_RING, true, true, FX_OUTPUT));
+
+    private static final FlameRingRenderTypeSet FLAME_FALLBACK_NO_DEPTH_SET = new FlameRingRenderTypeSet(
+        postAdditiveToFlame("flame_ring_fallback_outer_nd", FLAME_RING, true, false, FX_OUTPUT),
+        postAdditiveToFlame("flame_ring_fallback_body_nd",  FLAME_RING, true, false, FX_OUTPUT),
+        postAdditiveToFlame("flame_ring_fallback_core_nd",  FLAME_RING, true, false, FX_OUTPUT));
+
     private static final GloompurgeMarkRenderer.RenderTypeSet DEPTH_SET =
         new GloompurgeMarkRenderer.RenderTypeSet(
             postAdditive("gloompurge_post_mark", GloompurgeTextures.MARK, false, true),
@@ -138,6 +150,11 @@ public final class PostRenderTypes extends RenderStateShard {
     /** 火环专用输出：CA1 只存火环，便于单独做屏幕空间扰动。 */
     public static FlameRingRenderTypeSet setFlameRing(boolean depthReady) {
         return depthReady ? FLAME_DEPTH_SET : FLAME_NO_DEPTH_SET;
+    }
+
+    /** FlameRingPass 不可用时的降级组：三层全部直写公共 CA0。 */
+    public static FlameRingRenderTypeSet setFlameRingFallback(boolean depthReady) {
+        return depthReady ? FLAME_FALLBACK_DEPTH_SET : FLAME_FALLBACK_NO_DEPTH_SET;
     }
 
     /** 破晦阵四条流的纹理路径（与 GloompurgeMarkRenderer 中的一致）。 */

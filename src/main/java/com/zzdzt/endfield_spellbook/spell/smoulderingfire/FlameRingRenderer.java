@@ -57,12 +57,13 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
     private static final float OUTER_WIDTH = 0.51f;
     private static final float BODY_WIDTH = 0.33f;
     private static final float CORE_WIDTH = 0.15f;
-    private static final float BREAK_DISTANCE = 0.75f;
-
     // ---------- P1 火焰形体 ----------
     private static final float TONGUE_CHANCE = 0.24f;
     private static final float TONGUE_MIN_LENGTH = 0.16f;
-    private static final float TONGUE_MAX_LENGTH = 0.52f;
+    private static final float TONGUE_MAX_LENGTH = 0.60f;
+    private static final float OUTER_EDGE_ROUGHNESS = 0.36f;
+    private static final float BODY_EDGE_ROUGHNESS = 0.17f;
+    private static final float CORE_EDGE_ROUGHNESS = 0.055f;
     private static final float TONGUE_MIN_WIDTH = 0.045f;
     private static final float TONGUE_MAX_WIDTH = 0.12f;
     private static final float HEAD_FORWARD = 0.62f;
@@ -136,7 +137,10 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
 
         // 溃散进度：0 = 正常；1 = 完全解体。
         float breakup = Mth.clamp((age - fadeStart) / (float) FlameRingCastCurve.FADE_TICKS, 0f, 1f);
-        float burnAlpha = age >= fadeStart ? 1f - breakup : FULL_RING_BURN_ALPHA;
+        // 16 帧参考：前段维持满环亮度，后段再随片段脱离逐渐淡出。
+        float burnAlpha = age >= fadeStart
+            ? FULL_RING_BURN_ALPHA * FlameRingBreakup.ringOpacity(breakup)
+            : FULL_RING_BURN_ALPHA;
 
         Vec3 center = new Vec3(0, FlameRingEntity.RING_HEIGHT, 0);
         Vec3 fwd = lookForward(entity);
@@ -169,10 +173,24 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
 
         renderFlameTongues(entity, pose, normal, outer, center, fwd, right,
             theta0, dir, revealDeg, radius, segments, age, breakup, burnAlpha * 0.92f, planeNormal);
+
+        // P4.2：环头不在 359° 时突然消失；闭环后固定在实际收尾点，并在满环燃烧期继续作为斩击焦点。
+        float headAlpha = FULL_RING_BURN_ALPHA;
+        if (age >= fadeStart) {
+            headAlpha *= 1f - FlameRingBreakup.smoothstep(0.35f, 0.88f, breakup);
+        }
         renderHead(entity, pose, normal, outer, center, fwd, right,
-            theta0, dir, revealDeg, radius, age, burnAlpha, planeNormal);
-        renderBreakupFragments(entity, pose, normal, body, center, fwd, right,
-            theta0, dir, radius, segments, breakup, burnAlpha, planeNormal);
+            theta0, dir, revealDeg, radius, age, headAlpha, 1.16f, 1.18f, 1.12f,
+            OUTER_DEPTH * 0.30f, planeNormal);
+        renderHead(entity, pose, normal, body, center, fwd, right,
+            theta0, dir, revealDeg, radius, age, headAlpha * 0.96f, 0.88f, 0.90f, 1.02f,
+            BODY_DEPTH * 0.28f, planeNormal);
+        renderHead(entity, pose, normal, core, center, fwd, right,
+            theta0, dir, revealDeg, radius, age, headAlpha * 0.90f, 0.48f, 0.54f, 0.90f,
+            CORE_DEPTH * 0.55f, planeNormal);
+
+        renderBreakupFragments(entity, pose, normal, outer, body, core, center, fwd, right,
+            theta0, dir, radius, age, breakup, planeNormal);
 
         poseStack.popPose();
     }
@@ -210,11 +228,15 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             float a0 = revealDeg * s0;
             float a1 = revealDeg * s1;
 
-            if (breakup > 0f && breakupThreshold(i, layer, entity.getId()) < breakup) {
+            float mid = (s0 + s1) * 0.5f;
+            int fragment = FlameRingBreakup.fragmentForNormalizedArc(mid);
+            float fragmentProgress = breakup > 0f
+                ? FlameRingBreakup.progress(breakup, fragment, entity.getId())
+                : 0f;
+            // 三材质共用同一裂解槽和释放阈值，确保裂口沿环周一致。
+            if (fragmentProgress >= FlameRingBreakup.RING_RELEASE_PROGRESS) {
                 continue;
             }
-
-            float mid = (s0 + s1) * 0.5f;
             float headDistance = (1f - mid) * revealedArc;
             float headBoost = revealDeg < 359f
                 ? (float) Math.exp(-Math.pow(headDistance / HEAD_BOOST_LENGTH, 2.0))
@@ -238,13 +260,36 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             Vec3 p1 = pointOnArc(center, fwd, right, theta0 + dir * a1, radius);
             Vec3 radial0 = radial(fwd, right, theta0 + dir * a0);
             Vec3 radial1 = radial(fwd, right, theta0 + dir * a1);
+            if (fragmentProgress > 0f) {
+                float shardTheta = theta0 + dir * 360f * FlameRingBreakup.fragmentCenter(fragment);
+                Vec3 shardRadial = radial(fwd, right, shardTheta);
+                Vec3 shardTangent = arcTangent(fwd, right, shardTheta).scale(dir);
+                Vec3 shardOffset = shardTangent.scale(
+                    FlameRingBreakup.tangentialDistance(fragmentProgress, fragment, entity.getId()))
+                    .add(shardRadial.scale(
+                        FlameRingBreakup.radialDistance(fragmentProgress, fragment, entity.getId())))
+                    .add(planeNormal.scale(
+                        FlameRingBreakup.normalDistance(fragmentProgress, fragment, entity.getId())));
+                p0 = p0.add(shardOffset);
+                p1 = p1.add(shardOffset);
+            }
 
             float wobbleMid = (wobble0 + wobble1) * 0.5f;
-            float outerMul = 1.0f
-                + 0.26f * wobbleMid
-                + 0.22f * headBoost
-                + 0.10f * ((flow0 + flow1) * 0.5f);
-            float innerMul = 0.72f + 0.12f * (1f - wobbleMid);
+
+            // P4.3：外焰用更强的多频轮廓起伏，主体收敛一档，炽核只保留微弱扰动。
+            // profile 随年龄连续推进、随段号固定采样，不会像逐帧随机噪声一样闪烁。
+            float edge0 = flameEdgeProfile(i, age, layer, entity.getId());
+            float edge1 = flameEdgeProfile(i + 1, age, layer, entity.getId());
+            float edgeRoughness = edgeRoughness(layer);
+            float outerMul0 = 1.0f + 0.26f * wobble0 + 0.22f * headBoost
+                + 0.10f * flow0 + edgeRoughness * (edge0 - 0.5f);
+            float outerMul1 = 1.0f + 0.26f * wobble1 + 0.22f * headBoost
+                + 0.10f * flow1 + edgeRoughness * (edge1 - 0.5f);
+            // 内缘比外缘更稳定，让环的中空形状持续可读。
+            float innerMul0 = 0.72f + 0.12f * (1f - wobble0)
+                + edgeRoughness * 0.12f * (edge0 - 0.5f);
+            float innerMul1 = 0.72f + 0.12f * (1f - wobble1)
+                + edgeRoughness * 0.12f * (edge1 - 0.5f);
 
             // P3：把平面 Ribbon 挤出为真正有前/后表面 + 内/外侧壁的体积带。
             // flow 在环向移动：鼓包沿 segment 参数传播，而不是随机静态噪声。
@@ -266,22 +311,22 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             float backOuter1 = -thickness * 0.46f + bulge1 * 0.42f;
             float backInner1 = -thickness * 0.29f + bulge1 * 0.22f;
 
-            Vec3 q0OuterFront = p0.add(radial0.scale(halfWidth * outerMul))
+            Vec3 q0OuterFront = p0.add(radial0.scale(halfWidth * outerMul0))
                 .add(planeNormal.scale(frontOuter0));
-            Vec3 q0InnerFront = p0.subtract(radial0.scale(halfWidth * innerMul))
+            Vec3 q0InnerFront = p0.subtract(radial0.scale(halfWidth * innerMul0))
                 .add(planeNormal.scale(frontInner0));
-            Vec3 q0OuterBack = p0.add(radial0.scale(halfWidth * outerMul))
+            Vec3 q0OuterBack = p0.add(radial0.scale(halfWidth * outerMul0))
                 .add(planeNormal.scale(backOuter0));
-            Vec3 q0InnerBack = p0.subtract(radial0.scale(halfWidth * innerMul))
+            Vec3 q0InnerBack = p0.subtract(radial0.scale(halfWidth * innerMul0))
                 .add(planeNormal.scale(backInner0));
 
-            Vec3 q1OuterFront = p1.add(radial1.scale(halfWidth * outerMul))
+            Vec3 q1OuterFront = p1.add(radial1.scale(halfWidth * outerMul1))
                 .add(planeNormal.scale(frontOuter1));
-            Vec3 q1InnerFront = p1.subtract(radial1.scale(halfWidth * innerMul))
+            Vec3 q1InnerFront = p1.subtract(radial1.scale(halfWidth * innerMul1))
                 .add(planeNormal.scale(frontInner1));
-            Vec3 q1OuterBack = p1.add(radial1.scale(halfWidth * outerMul))
+            Vec3 q1OuterBack = p1.add(radial1.scale(halfWidth * outerMul1))
                 .add(planeNormal.scale(backOuter1));
-            Vec3 q1InnerBack = p1.subtract(radial1.scale(halfWidth * innerMul))
+            Vec3 q1InnerBack = p1.subtract(radial1.scale(halfWidth * innerMul1))
                 .add(planeNormal.scale(backInner1));
 
             float phase0 = s0 * 31f - age * FLOW_SPEED * (1f + layer * 0.12f);
@@ -324,14 +369,17 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
         if (revealDeg <= 1f) return;
 
         for (int i = 0; i < segments; i++) {
-            if (breakupHash(i, 7, entity.getId()) > TONGUE_CHANCE) continue;
+            // 火舌的出现位置固定，但概率受低频空间簇控制：形成长短错落的火焰群，而非等距梳齿。
+            float cluster = 0.5f + 0.5f * (float) Math.sin(i * 0.19f + entity.getId() * 0.11f);
+            float localChance = TONGUE_CHANCE * (0.58f + 0.84f * cluster);
+            if (breakupHash(i, 7, entity.getId()) > localChance) continue;
 
             float s = (i + 0.37f) / segments;
             float theta = theta0 + dir * revealDeg * s;
             float local = breakupHash(i, 8, entity.getId());
             float pulse = flameWobble(i + 31, age * 1.12f, 4);
             float length = Mth.lerp(local, TONGUE_MIN_LENGTH, TONGUE_MAX_LENGTH)
-                * (0.72f + 0.48f * pulse);
+                * (0.68f + 0.52f * pulse) * (0.82f + 0.36f * cluster);
             float half = Mth.lerp(breakupHash(i, 9, entity.getId()),
                 TONGUE_MIN_WIDTH, TONGUE_MAX_WIDTH) * 0.5f;
 
@@ -361,78 +409,129 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
         }
     }
 
-    /** P1：独立攻击性环头。 */
+    /**
+     * P4.2：多材质剑斩环头。
+     *
+     * <p>外焰提供最长的火舌轮廓，主焰承托剑锋，窄炽核将亮线延伸到前锋。
+     * reveal 到 360° 后不删除环头；角度自然停留在扫掠终点，从而维持参考帧 04–12 的视觉焦点。
+     */
     private void renderHead(FlameRingEntity entity, Matrix4f pose, Matrix3f normal,
                             VertexConsumer consumer, Vec3 center, Vec3 fwd, Vec3 right,
                             float theta0, float dir, float revealDeg, float radius,
-                            float age, float alpha, Vec3 planeNormal) {
-        if (revealDeg >= 359f) return;
+                            float age, float alpha, float widthScale, float sideScale,
+                            float forwardScale, float depthOffset, Vec3 planeNormal) {
+        if (alpha <= 0.005f) return;
 
-        float theta = theta0 + dir * revealDeg;
+        // theta clamp 只防浮点越界，不把头重新映射到独立动画曲线；其位置始终是 Reveal Curve 的前沿。
+        float theta = theta0 + dir * Mth.clamp(revealDeg, 0f, 360f);
         Vec3 head = pointOnArc(center, fwd, right, theta, radius);
         Vec3 tangent = arcTangent(fwd, right, theta).scale(dir);
         Vec3 rad = radial(fwd, right, theta);
-        Vec3 side = rad.scale(OUTER_WIDTH * 0.42f);
 
+        float width = OUTER_WIDTH * widthScale;
+        Vec3 side = rad.scale(width * 0.42f);
         float headDepth = 0.032f + 0.028f * (0.5f + 0.5f * Mth.sin(age * 1.7f));
-        Vec3 baseL = head.subtract(tangent.scale(0.12f)).subtract(side).add(planeNormal.scale(headDepth * 0.72f));
-        Vec3 baseR = head.subtract(tangent.scale(0.12f)).add(side).add(planeNormal.scale(headDepth * 0.72f));
-        Vec3 tip = head.add(tangent.scale(HEAD_FORWARD)).add(rad.scale(0.12f))
-            .add(planeNormal.scale(headDepth));
-        float a = alpha * (0.80f + 0.20f * (0.5f + 0.5f * Mth.sin(age * 0.9f)));
+        float frontDepth = headDepth + depthOffset;
 
+        // 主锋：前伸的楔形，而非圆环末端独立闪点。
+        Vec3 baseL = head.subtract(tangent.scale(0.15f * forwardScale))
+            .subtract(side).add(planeNormal.scale(frontDepth * 0.72f));
+        Vec3 baseR = head.subtract(tangent.scale(0.15f * forwardScale))
+            .add(side).add(planeNormal.scale(frontDepth * 0.72f));
+        Vec3 tip = head.add(tangent.scale(HEAD_FORWARD * forwardScale))
+            .add(rad.scale(0.12f * sideScale))
+            .add(planeNormal.scale(frontDepth));
+
+        float pulse = 0.92f + 0.08f * (0.5f + 0.5f * Mth.sin(age * 0.9f));
+        float a = Mth.clamp(alpha * pulse, 0f, 1f);
         putVertex(consumer, pose, normal, baseL, 0f, 1f, 1f, 0.49f, 0.19f, a);
         putVertex(consumer, pose, normal, baseR, 1f, 1f, 1f, 0.49f, 0.19f, a);
-        putVertex(consumer, pose, normal, tip, 0.5f, 0f, 1f, 0.92f, 0.58f, a * 0.08f);
-        putVertex(consumer, pose, normal, tip, 0.5f, 0f, 1f, 0.92f, 0.58f, a * 0.08f);
+        putVertex(consumer, pose, normal, tip, 0.5f, 0f, 1f, 0.92f, 0.58f, a * 0.06f);
+        putVertex(consumer, pose, normal, tip, 0.5f, 0f, 1f, 0.92f, 0.58f, a * 0.06f);
 
+        // 双侧火翼：从剑锋两侧甩出短钩，外焰最长、炽核最窄，保留清晰的剑尖方向。
         for (int k = -1; k <= 1; k += 2) {
-            Vec3 base = head.add(rad.scale(k * HEAD_SIDE * 0.45f)).subtract(tangent.scale(0.05f));
-            Vec3 tipSide = base.add(tangent.scale(0.28f + 0.08f * k)).add(rad.scale(k * HEAD_SIDE));
-            Vec3 s = rad.scale(0.07f);
-            putVertex(consumer, pose, normal, base.subtract(s), 0f, 1f, 0.96f, 0.40f, 0.14f, a * 0.62f);
-            putVertex(consumer, pose, normal, base.add(s), 1f, 1f, 0.96f, 0.40f, 0.14f, a * 0.62f);
-            putVertex(consumer, pose, normal, tipSide, 0.5f, 0f, 1f, 0.72f, 0.35f, a * 0.05f);
-            putVertex(consumer, pose, normal, tipSide, 0.5f, 0f, 1f, 0.72f, 0.35f, a * 0.05f);
+            Vec3 base = head.add(rad.scale(k * HEAD_SIDE * 0.40f * sideScale))
+                .subtract(tangent.scale(0.06f * forwardScale))
+                .add(planeNormal.scale(frontDepth * 0.64f));
+            Vec3 tipSide = base.add(tangent.scale((0.30f + 0.06f * k) * forwardScale))
+                .add(rad.scale(k * HEAD_SIDE * sideScale));
+            Vec3 s = rad.scale(width * 0.16f);
+            float wingAlpha = a * (k > 0 ? 0.72f : 0.62f);
+            putVertex(consumer, pose, normal, base.subtract(s), 0f, 1f,
+                0.98f, 0.40f, 0.14f, wingAlpha);
+            putVertex(consumer, pose, normal, base.add(s), 1f, 1f,
+                0.98f, 0.40f, 0.14f, wingAlpha);
+            putVertex(consumer, pose, normal, tipSide, 0.5f, 0f,
+                1f, 0.82f, 0.40f, wingAlpha * 0.04f);
+            putVertex(consumer, pose, normal, tipSide, 0.5f, 0f,
+                1f, 0.82f, 0.40f, wingAlpha * 0.04f);
         }
     }
 
-    /** P1：溃散中间态残片。 */
+    /**
+     * P4.1：几何碎片与火流来自同一片段槽。每个槽先从原弧脱离，再沿切线拉长，
+     * 最后在每个片段自己的生命周期末段淡出，避免“环消失后另一个粒子团凭空出现”。
+     */
     private void renderBreakupFragments(FlameRingEntity entity, Matrix4f pose, Matrix3f normal,
-                                        VertexConsumer consumer, Vec3 center, Vec3 fwd, Vec3 right,
-                                        float theta0, float dir, float radius, int segments,
-                                        float breakup, float alpha, Vec3 planeNormal) {
+                                        VertexConsumer outer, VertexConsumer body, VertexConsumer core,
+                                        Vec3 center, Vec3 fwd, Vec3 right,
+                                        float theta0, float dir, float radius, float age,
+                                        float breakup, Vec3 planeNormal) {
         if (breakup <= 0f) return;
 
-        float stage = Mth.clamp(breakup * 1.45f, 0f, 1f);
-        float motion = stage * stage;
-        for (int i = 0; i < segments; i++) {
-            float h = breakupHash(i, 11, entity.getId());
-            if (h > breakup * 1.22f) continue;
+        float arcSlotLength = (float) (Math.PI * 2.0 * radius / FlameRingBreakup.FRAGMENT_COUNT);
+        float scroll = age * UV_SCROLL_PER_TICK;
+        for (int fragment = 0; fragment < FlameRingBreakup.FRAGMENT_COUNT; fragment++) {
+            float progress = FlameRingBreakup.progress(breakup, fragment, entity.getId());
+            // 全局末段衰减保证 14-16 帧整体迅速变稀；片段自身曲线再控制各自淡出。
+            float globalFragmentFade = 1.0f - FlameRingBreakup.smoothstep(0.56f, 1.0f, breakup);
+            float fragmentAlpha = FlameRingBreakup.opacity(progress)
+                * globalFragmentFade * FULL_RING_BURN_ALPHA;
+            if (fragmentAlpha <= 0.005f) continue;
 
-            float s = (i + 0.5f) / segments;
-            float theta = theta0 + dir * 360f * s;
-            Vec3 p = pointOnArc(center, fwd, right, theta, radius);
+            float theta = theta0 + dir * 360f * FlameRingBreakup.fragmentCenter(fragment);
+            Vec3 base = pointOnArc(center, fwd, right, theta, radius);
             Vec3 rad = radial(fwd, right, theta);
             Vec3 tan = arcTangent(fwd, right, theta).scale(dir);
+            Vec3 moved = base
+                .add(tan.scale(FlameRingBreakup.tangentialDistance(progress, fragment, entity.getId())))
+                .add(rad.scale(FlameRingBreakup.radialDistance(progress, fragment, entity.getId())))
+                .add(planeNormal.scale(FlameRingBreakup.normalDistance(progress, fragment, entity.getId())));
 
-            float length = 0.14f + 0.36f * h;
-            float width = 0.05f + 0.07f * (1f - h);
-            Vec3 offset = tan.scale(BREAK_DISTANCE * motion * (0.35f + 0.95f * h))
-                .add(rad.scale(BREAK_DISTANCE * motion * (h - 0.45f) * 0.55f))
-                .add(planeNormal.scale(BREAK_DISTANCE * motion * (h - 0.5f) * 0.42f));
-            Vec3 centerP = p.add(offset).add(planeNormal.scale(0.01f));
-            Vec3 baseL = centerP.subtract(tan.scale(length * 0.5f)).subtract(rad.scale(width));
-            Vec3 baseR = centerP.subtract(tan.scale(length * 0.5f)).add(rad.scale(width));
-            Vec3 tip = centerP.add(tan.scale(length * 0.8f))
-                .add(rad.scale(width * (0.8f + 1.4f * h)));
-            float a = alpha * (1f - stage) * (0.35f + 0.55f * h);
+            float halfLength = arcSlotLength * FlameRingBreakup.lengthScale(progress) * 0.5f;
+            float u0 = FlameRingBreakup.fragmentCenter(fragment) * U_TILING + scroll;
+            float u1 = u0 + U_TILING / FlameRingBreakup.FRAGMENT_COUNT
+                * FlameRingBreakup.lengthScale(progress);
 
-            putVertex(consumer, pose, normal, baseL, 0f, 1f, 0.94f, 0.35f, 0.12f, a);
-            putVertex(consumer, pose, normal, baseR, 1f, 1f, 1.0f, 0.52f, 0.18f, a);
-            putVertex(consumer, pose, normal, tip, 0.5f, 0f, 1f, 0.82f, 0.40f, a * 0.05f);
-            putVertex(consumer, pose, normal, tip, 0.5f, 0f, 1f, 0.82f, 0.40f, a * 0.05f);
+            renderFragmentLayer(outer, pose, normal, moved, tan, rad, planeNormal,
+                halfLength, OUTER_WIDTH, OUTER_DEPTH, u0, u1,
+                0.68f, 0.27f, 0.21f, fragmentAlpha * 0.88f,
+                FlameRingBreakup.widthScale(progress));
+            renderFragmentLayer(body, pose, normal, moved, tan, rad, planeNormal,
+                halfLength, BODY_WIDTH, BODY_DEPTH, u0, u1,
+                0.92f, 0.41f, 0.23f, fragmentAlpha * 0.92f,
+                FlameRingBreakup.widthScale(progress));
+            renderFragmentLayer(core, pose, normal, moved, tan, rad, planeNormal,
+                halfLength, CORE_WIDTH, CORE_DEPTH, u0, u1,
+                1.0f, 0.84f, 0.56f, fragmentAlpha * 0.66f,
+                FlameRingBreakup.widthScale(progress));
         }
+    }
+
+    private void renderFragmentLayer(VertexConsumer consumer, Matrix4f pose, Matrix3f normal,
+                                     Vec3 center, Vec3 tangent, Vec3 radial, Vec3 planeNormal,
+                                     float halfLength, float width, float depth,
+                                     float u0, float u1, float r, float g, float b, float alpha,
+                                     float widthScale) {
+        float halfWidth = width * 0.5f * widthScale;
+        Vec3 offset = planeNormal.scale(depth * 0.45f);
+        Vec3 q0 = center.subtract(tangent.scale(halfLength)).subtract(radial.scale(halfWidth)).add(offset);
+        Vec3 q1 = center.subtract(tangent.scale(halfLength)).add(radial.scale(halfWidth)).add(offset);
+        Vec3 q2 = center.add(tangent.scale(halfLength)).add(radial.scale(halfWidth)).add(offset);
+        Vec3 q3 = center.add(tangent.scale(halfLength)).subtract(radial.scale(halfWidth)).add(offset);
+        putQuad(consumer, pose, normal, q0, q1, q2, q3, planeNormal,
+            u0, u1, r, g, b, alpha, 0f, 1f);
     }
 
     private static void putVertex(
@@ -550,16 +649,29 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
         return right.normalize();
     }
 
+    /** Multiband travelling silhouette noise; fixed spatial samples prevent per-frame random popping. */
+    private static float flameEdgeProfile(int index, float age, int layer, int entityId) {
+        float x = index * 0.731f + entityId * 0.013f + layer * 2.17f;
+        float low = (float) Math.sin(x * 1.73f - age * 0.72f);
+        float mid = (float) Math.sin(x * 4.61f - age * 1.18f + 0.8f);
+        float high = (float) Math.sin(x * 9.37f - age * 1.61f + 2.1f);
+        return Mth.clamp(0.5f + 0.28f * low + 0.15f * mid + 0.07f * high, 0f, 1f);
+    }
+
+    private static float edgeRoughness(int layer) {
+        return switch (layer) {
+            case 0 -> OUTER_EDGE_ROUGHNESS;
+            case 1 -> BODY_EDGE_ROUGHNESS;
+            default -> CORE_EDGE_ROUGHNESS;
+        };
+    }
+
     private static float flameWobble(int index, float age, int layer) {
         float x = index * 0.731f + layer * 11.37f;
         float a = (float) Math.sin(x * 5.17f + age * NOISE_SPEED * 3.6f);
         float b = (float) Math.sin(x * 2.11f - age * NOISE_SPEED * 1.7f + 1.7f);
         float c = (float) Math.sin(x * 8.43f + age * NOISE_SPEED * 5.2f + 0.31f);
         return Mth.clamp(0.52f + 0.24f * a + 0.18f * b + 0.06f * c, 0f, 1f);
-    }
-
-    private static float breakupThreshold(int index, int layer, int entityId) {
-        return breakupHash(index, layer, entityId);
     }
 
     private static float breakupHash(int index, int layer, int entityId) {

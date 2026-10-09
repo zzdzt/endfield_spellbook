@@ -2,6 +2,7 @@ package com.zzdzt.endfield_spellbook.client.post;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.zzdzt.endfield_spellbook.EndfieldSpellbook;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL20;
@@ -117,6 +118,11 @@ public final class ArcaneFBO implements AutoCloseable {
     }
 
     private void attachDepth() {
+        // 防御卫语句（P0.3）：未分配/已删除的深度纹理或缺 FBO 时不得挂接，
+        // 否则 glFramebufferTexture2D 收到 -1 句柄会产生 GL 错误且污染错误队列
+        if (fboId == -1 || depthTexture == -1 || depthSpec == null) {
+            return;
+        }
         GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, fboId);
         GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, depthSpec.attachmentPoint(),
             GL11.GL_TEXTURE_2D, depthTexture, 0);
@@ -167,6 +173,11 @@ public final class ArcaneFBO implements AutoCloseable {
         if (depthTexture == -1 || depthSpec == null) {
             return false;
         }
+        // P0.4：blit 前清空历史污染（错误队列是 FIFO，drain 到 GL_NO_ERROR 为止），
+        // 使 blit 后的 glGetError 只反映本次操作——此前 resize 残留的错误曾把
+        // depthReady 永久打假。注意此检查不能定位错误来源，只保证判定纯净。
+        while (GL11.glGetError() != GL11.GL_NO_ERROR) {
+        }
         GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, source.frameBufferId);
         GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, fboId);
         GL30.glBlitFramebuffer(0, 0, source.width, source.height,
@@ -205,14 +216,60 @@ public final class ArcaneFBO implements AutoCloseable {
         if (newWidth <= 0 || newHeight <= 0 || (newWidth == width && newHeight == height && fboId != -1)) {
             return;
         }
+        // 先捕获旧深度格式：close() 会删深度纹理且本方法随后把 depthSpec 归零，
+        // 否则 create() 会带着 depthSpec != null 走 attachDepth()，用 -1 句柄挂接 → GL_INVALID_VALUE
+        DepthSpec previousDepth = depthSpec;
+
         close();
+        depthSpec = null; // 颜色 FBO 重建期间不得挂接已删除的深度纹理
         create(newWidth, newHeight);
-        if (depthSpec != null) {
-            int fmt = depthSpec.internalFormat();
-            depthSpec = null;
-            depthTexture = -1;
-            ensureDepth(fmt);
+
+        // 颜色附件就绪后再重建深度附件；深度是可选增强，失败走可降级校验，绝不抛出
+        if (previousDepth != null) {
+            ensureDepth(previousDepth.internalFormat());
+            validateDepthAttachment();
         }
+    }
+
+    /**
+     * 深度挂接后的可降级完整性校验（P0.2）：不完整时解挂并清理失败纹理，<b>绝不抛出异常</b>——
+     * resize/doPost 外层的 catch 会把异常升级为 PipelinePost.failed，杀死整条管线。
+     *
+     * @return true = 深度附件可用；false = 已降级为无深度（颜色路径继续，后续帧/resize 可重试重建）
+     */
+    private boolean validateDepthAttachment() {
+        if (fboId == -1) {
+            return false;
+        }
+        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, fboId);
+        int status = GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER);
+        if (status == GL30.GL_FRAMEBUFFER_COMPLETE) {
+            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+            return true;
+        }
+        EndfieldSpellbook.LOGGER.error(
+            "[EndfieldSpellbook] ArcaneFBO incomplete after depth attach (0x{}) — detaching depth, degrading to color-only",
+            Integer.toHexString(status));
+        // 用当前 DepthSpec 实际对应的附件点解挂（D24/DEPTH_COMPONENT → GL_DEPTH_ATTACHMENT，
+        // D24S8/DEPTH32F_STENCIL8 → GL_DEPTH_STENCIL_ATTACHMENT），不盲目假设只有 GL_DEPTH_ATTACHMENT
+        if (depthSpec != null) {
+            GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, depthSpec.attachmentPoint(),
+                GL11.GL_TEXTURE_2D, 0, 0);
+        }
+        if (depthTexture != -1) {
+            GL11.glDeleteTextures(depthTexture);
+            depthTexture = -1;
+        }
+        // 解挂后复核颜色核心功能；仍不完整属于核心故障，但同样不由本可降级方法抛异常，
+        // 交给后续使用该 FBO 的既有失败路径（create/blit 调用方）暴露
+        status = GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER);
+        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+        if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
+            EndfieldSpellbook.LOGGER.error(
+                "[EndfieldSpellbook] ArcaneFBO STILL incomplete without depth (0x{}) — color path broken",
+                Integer.toHexString(status));
+        }
+        return false;
     }
 
     @Override
