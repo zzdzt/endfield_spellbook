@@ -24,7 +24,7 @@ import java.util.UUID;
 
 /**
  * Server-authoritative hit controller for the V2 flame ring.
- * It shares the visible ring's timeline and checks only each newly revealed arc segment.
+ * It shares the visible ring's timeline and checks only each newly revealed fan sector, from the center to the outer arc.
  */
 public class FlameRingAttackEntity extends Entity implements SpellVisualOnly {
     private static final double SAMPLE_SPACING = 0.22;
@@ -110,7 +110,7 @@ public class FlameRingAttackEntity extends Entity implements SpellVisualOnly {
             if (!(candidate instanceof LivingEntity target)) continue;
             if (!Utils.hasLineOfSight(level(), caster.getEyePosition(),
                 target.getBoundingBox().getCenter(), true)) continue;
-            if (!touchesArc(target.getBoundingBox(), center, forward, right, theta0,
+            if (!touchesFanSector(target.getBoundingBox(), center, forward, right, theta0,
                 direction, fromDegrees, toDegrees)) continue;
 
             // Register before applying damage so overlapping samples cannot double-hit this cast.
@@ -130,20 +130,31 @@ public class FlameRingAttackEntity extends Entity implements SpellVisualOnly {
         }
     }
 
-    private boolean touchesArc(AABB targetBounds, Vec3 center, Vec3 forward, Vec3 right,
-                               float theta0, float direction, float fromDegrees, float toDegrees) {
-        double arcLength = radius * Math.toRadians(Math.abs(toDegrees - fromDegrees));
-        int segments = Math.max(1, (int) Math.ceil(arcLength / SAMPLE_SPACING));
+    /**
+     * Test the newly revealed fan sector, not just the outer ring arc.
+     *
+     * Each sampled angle contributes a ray from the ring center to the outer radius. Sampling
+     * density is based on the outer arc length, so radial rays remain close together at the edge
+     * and closer together toward the center. As reveal progress travels from 0 to 360 degrees,
+     * these fan sectors sweep the complete disk without re-checking old sectors.
+     */
+    private boolean touchesFanSector(AABB targetBounds, Vec3 center, Vec3 forward, Vec3 right,
+                                     float theta0, float direction,
+                                     float fromDegrees, float toDegrees) {
+        double outerArcLength = radius * Math.toRadians(Math.abs(toDegrees - fromDegrees));
+        int angularSegments = Math.max(1, (int) Math.ceil(outerArcLength / SAMPLE_SPACING));
         AABB expandedTarget = targetBounds.inflate(HIT_THICKNESS);
-        Vec3 previousPoint = FlameRingGeometry.pointOnArc(
-            center, forward, right, theta0 + direction * fromDegrees, radius);
-        for (int i = 1; i <= segments; i++) {
-            float progress = i / (float) segments;
+
+        for (int i = 0; i <= angularSegments; i++) {
+            float progress = i / (float) angularSegments;
             float degree = fromDegrees + (toDegrees - fromDegrees) * progress;
-            Vec3 nextPoint = FlameRingGeometry.pointOnArc(
+            Vec3 outerPoint = FlameRingGeometry.pointOnArc(
                 center, forward, right, theta0 + direction * degree, radius);
-            if (expandedTarget.clip(previousPoint, nextPoint).isPresent()) return true;
-            previousPoint = nextPoint;
+
+            // Fill the radius from the player-side center all the way to the current outer arc.
+            if (expandedTarget.clip(center, outerPoint).isPresent()) {
+                return true;
+            }
         }
         return false;
     }
