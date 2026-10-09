@@ -137,10 +137,22 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
 
         // 溃散进度：0 = 正常；1 = 完全解体。
         float breakup = Mth.clamp((age - fadeStart) / (float) FlameRingCastCurve.FADE_TICKS, 0f, 1f);
+
+        // P4.4：只在完整环的 4 tick 燃烧窗内驱动一次平滑呼吸；窗口前后脉冲归零，
+        // 因而不改变 Reveal Curve，不会在传播末帧或溃散首帧产生亮度跳变。
+        float burnStart = FlameRingCastCurve.SLASH_TICKS + FlameRingCastCurve.PROPAGATE_TICKS;
+        boolean fullRingBurning = revealDeg >= 359f && age >= burnStart && age < fadeStart;
+        float burnProgress = fullRingBurning
+            ? Mth.clamp((age - burnStart) / FlameRingCastCurve.BURN_TICKS, 0f, 1f)
+            : 0f;
+        float fullRingPulse = fullRingBurning
+            ? Mth.sin(burnProgress * ((float) Math.PI * 2f))
+            : 0f;
+
         // 16 帧参考：前段维持满环亮度，后段再随片段脱离逐渐淡出。
         float burnAlpha = age >= fadeStart
             ? FULL_RING_BURN_ALPHA * FlameRingBreakup.ringOpacity(breakup)
-            : FULL_RING_BURN_ALPHA;
+            : FULL_RING_BURN_ALPHA * (1f + fullRingPulse * 0.035f);
 
         Vec3 center = new Vec3(0, FlameRingEntity.RING_HEIGHT, 0);
         Vec3 fwd = lookForward(entity);
@@ -165,19 +177,25 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
 
         // 三层染色：外焰 / 主焰 / 炽核。
         renderLayer(entity, pose, normal, outer, center, fwd, right, theta0, dir,
-            revealDeg, radius, segments, age, breakup, OUTER_WIDTH, 0.68f, 0.27f, 0.21f, burnAlpha, 0, planeNormal);
+            revealDeg, radius, segments, age, breakup, fullRingPulse,
+            OUTER_WIDTH, 0.68f, 0.27f, 0.21f, burnAlpha, 0, planeNormal);
         renderLayer(entity, pose, normal, body, center, fwd, right, theta0, dir,
-            revealDeg, radius, segments, age, breakup, BODY_WIDTH, 0.92f, 0.41f, 0.23f, burnAlpha * 0.95f, 1, planeNormal);
+            revealDeg, radius, segments, age, breakup, fullRingPulse,
+            BODY_WIDTH, 0.92f, 0.41f, 0.23f, burnAlpha * 0.95f, 1, planeNormal);
         renderLayer(entity, pose, normal, core, center, fwd, right, theta0, dir,
-            revealDeg, radius, segments, age, breakup, CORE_WIDTH, 1.0f, 0.84f, 0.56f, burnAlpha * 0.72f, 2, planeNormal);
+            revealDeg, radius, segments, age, breakup, fullRingPulse,
+            CORE_WIDTH, 1.0f, 0.84f, 0.56f, burnAlpha * 0.72f, 2, planeNormal);
 
         renderFlameTongues(entity, pose, normal, outer, center, fwd, right,
-            theta0, dir, revealDeg, radius, segments, age, breakup, burnAlpha * 0.92f, planeNormal);
+            theta0, dir, revealDeg, radius, segments, age, breakup, fullRingPulse,
+            burnAlpha * 0.92f, planeNormal);
 
         // P4.2：环头不在 359° 时突然消失；闭环后固定在实际收尾点，并在满环燃烧期继续作为斩击焦点。
         float headAlpha = FULL_RING_BURN_ALPHA;
         if (age >= fadeStart) {
             headAlpha *= 1f - FlameRingBreakup.smoothstep(0.35f, 0.88f, breakup);
+        } else {
+            headAlpha *= 1f + fullRingPulse * 0.025f;
         }
         renderHead(entity, pose, normal, outer, center, fwd, right,
             theta0, dir, revealDeg, radius, age, headAlpha, 1.16f, 1.18f, 1.12f,
@@ -210,6 +228,7 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
         int segments,
         float age,
         float breakup,
+        float fullRingPulse,
         float width,
         float r,
         float g,
@@ -247,10 +266,16 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             float flow0 = flowProfile(s0, age, layer, entity.getId());
             float flow1 = flowProfile(s1, age, layer, entity.getId());
 
-            float widthMul = 0.76f
+            float layerBreath = switch (layer) {
+                case 0 -> 0.105f;
+                case 1 -> 0.045f;
+                default -> 0.012f;
+            };
+            float widthMul = (0.76f
                 + 0.34f * ((wobble0 + wobble1) * 0.5f)
                 + 0.85f * headBoost
-                + 0.12f * ((flow0 + flow1) * 0.5f);
+                + 0.12f * ((flow0 + flow1) * 0.5f))
+                * (1f + fullRingPulse * layerBreath);
             if (breakup > 0f) {
                 widthMul *= 1f - breakup * 0.30f;
             }
@@ -299,7 +324,8 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
                 * (0.22f + 0.78f * flow1) * (0.78f + 0.22f * wobble1);
 
             float thickness = depthScale
-                * (0.82f + 0.28f * wobbleMid + 0.42f * headBoost);
+                * (0.82f + 0.28f * wobbleMid + 0.42f * headBoost)
+                * (1f + fullRingPulse * layerBreath * 0.55f);
 
             float frontOuter0 = thickness * 0.54f + bulge0;
             float frontInner0 = thickness * 0.31f + bulge0 * 0.55f;
@@ -334,7 +360,13 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             float u0 = fract(s0 * U_TILING + scroll + (float) Math.sin(phase0) * 0.035f);
             float u1 = fract(s1 * U_TILING + scroll + (float) Math.sin(phase1) * 0.035f);
 
-            float a = Mth.clamp(alpha * (1f + headBoost * 1.25f), 0f, 1f);
+            float layerLightBreath = switch (layer) {
+                case 0 -> 0.075f;
+                case 1 -> 0.040f;
+                default -> 0.012f;
+            };
+            float a = Mth.clamp(alpha * (1f + headBoost * 1.25f)
+                * (1f + fullRingPulse * layerLightBreath), 0f, 1f);
             if (breakup > 0f) {
                 a *= 0.35f + 0.65f * (1f - breakup);
             }
@@ -365,7 +397,8 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
     private void renderFlameTongues(FlameRingEntity entity, Matrix4f pose, Matrix3f normal,
                                     VertexConsumer consumer, Vec3 center, Vec3 fwd, Vec3 right,
                                     float theta0, float dir, float revealDeg, float radius,
-                                    int segments, float age, float breakup, float alpha, Vec3 planeNormal) {
+                                    int segments, float age, float breakup,
+                                    float fullRingPulse, float alpha, Vec3 planeNormal) {
         if (revealDeg <= 1f) return;
 
         for (int i = 0; i < segments; i++) {
@@ -379,7 +412,8 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             float local = breakupHash(i, 8, entity.getId());
             float pulse = flameWobble(i + 31, age * 1.12f, 4);
             float length = Mth.lerp(local, TONGUE_MIN_LENGTH, TONGUE_MAX_LENGTH)
-                * (0.68f + 0.52f * pulse) * (0.82f + 0.36f * cluster);
+                * (0.68f + 0.52f * pulse) * (0.82f + 0.36f * cluster)
+                * (1f + 0.16f * fullRingPulse);
             float half = Mth.lerp(breakupHash(i, 9, entity.getId()),
                 TONGUE_MIN_WIDTH, TONGUE_MAX_WIDTH) * 0.5f;
 
@@ -397,7 +431,8 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
             Vec3 tipA = tip.add(side.scale(0.18f)).add(planeNormal.scale(tongueDepth));
             Vec3 tipB = tip.subtract(side.scale(0.18f)).add(planeNormal.scale(tongueDepth));
 
-            float a = alpha * (0.34f + 0.42f * pulse);
+            float a = alpha * (0.34f + 0.42f * pulse)
+                * (1f + 0.075f * fullRingPulse);
             if (breakup > 0f) {
                 a *= 0.35f + 0.65f * (1f - breakup);
             }
