@@ -11,6 +11,7 @@ import com.zzdzt.endfield_spellbook.spell.liquidnitrogencannon.LncProjectileEnti
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanBlastVisualEntity;
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanEntity;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.FlameRingEntity;
+import com.zzdzt.endfield_spellbook.spell.smoulderingfire.FlameRingAttackEntity;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.PhantomBladeEntity;
 
 import net.minecraft.resources.ResourceLocation;
@@ -123,6 +124,16 @@ public class EntityRegistry {
                 .clientTrackingRange(64)
                 .updateInterval(20)
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "flame_ring").toString())
+        );
+
+    // Server-only controller: attack timing is shared with the visible ring; no client renderer/tracking.
+    public static final RegistryObject<EntityType<FlameRingAttackEntity>> FLAME_RING_ATTACK =
+        ENTITY_TYPES.register("flame_ring_attack", () ->
+            EntityType.Builder.<FlameRingAttackEntity>of(FlameRingAttackEntity::new, MobCategory.MISC)
+                .sized(0.1f, 0.1f)
+                .clientTrackingRange(0)
+                .updateInterval(20)
+                .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "flame_ring_attack").toString())
         );
 
     // 衔火血翼（驱火焚影：俯冲/盘桓/转移/爆裂载体，V1 隐形 + 血萤云表现）

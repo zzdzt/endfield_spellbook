@@ -137,6 +137,7 @@ public class SmoulderingFireSpell extends AbstractSpell {
 
         // ① 吸收：横扫范围内的敌人身上的灼热附着 → 熔火
         List<LivingEntity> targets = collectTargets(level, entity, hitLocation, RADIUS);
+        boolean slashAttack = hasSlashWeapon(entity);
         float radius = RADIUS;
         float damageMult = 1.0f;
 
@@ -158,7 +159,7 @@ public class SmoulderingFireSpell extends AbstractSpell {
             }
 
             // 幻影魔剑协同（纯视觉，无伤害）：主手武器有攻击伤害时投影横扫（与斩击同向）
-            if (hasSlashWeapon(entity)) {
+            if (slashAttack) {
                 boolean mirrored = playerMagicData.getCastingEquipmentSlot()
                     .equals(SpellSelectionManager.OFFHAND);
                 // 焚灭大回环斩：幻影魔剑砍出火环（环头=剑尖，弧面跟随施法准星），火焰顺剑势跑满一圈后碎裂
@@ -169,28 +170,35 @@ public class SmoulderingFireSpell extends AbstractSpell {
                     EntityRegistry.FLAME_RING.get(), serverLevel,
                     entity.position(), DISTANCE, angles[0], angles[1],
                     entity.getXRot(), entity.getYRot()));
+                // Share the visual ring's origin, radius, plane and reveal curve for authoritative hits.
+                level.addFreshEntity(new FlameRingAttackEntity(
+                    EntityRegistry.FLAME_RING_ATTACK.get(), serverLevel, entity,
+                    this.getDamageSource(entity), getDamage(spellLevel, entity) * damageMult,
+                    entity.position(), DISTANCE, angles[0], angles[1],
+                    entity.getXRot(), entity.getYRot()));
             }
         }
 
-        // ③ 结算横扫伤害（主手+副手武器伤害叠加）
-        var damageSource = this.getDamageSource(entity);
+        // ③ 魔剑/火环演出使用新弧段逐 tick 命中；无魔剑演出时保留旧范围伤害作为兼容回退。
+        if (!slashAttack) {
+            var damageSource = this.getDamageSource(entity);
+            for (LivingEntity livingTarget : targets) {
+                float baseDamage = getDamage(spellLevel, entity) * damageMult;
+                if (entity.distanceToSqr(livingTarget) >= radius * radius) continue;
 
-        for (LivingEntity livingTarget : targets) {
-            float baseDamage = getDamage(spellLevel, entity) * damageMult;
-            if (entity.distanceToSqr(livingTarget) >= radius * radius) continue;
+                if (DamageSources.applyDamage(livingTarget, baseDamage, damageSource)) {
+                    MagicManager.spawnParticles(level, ParticleHelper.FIRE,
+                        livingTarget.getX(),
+                        livingTarget.getY() + livingTarget.getBbHeight() * 0.5f,
+                        livingTarget.getZ(),
+                        30,
+                        livingTarget.getBbWidth() * 0.5f,
+                        livingTarget.getBbHeight() * 0.5f,
+                        livingTarget.getBbWidth() * 0.5f,
+                        0.03, false);
 
-            if (DamageSources.applyDamage(livingTarget, baseDamage, damageSource)) {
-                MagicManager.spawnParticles(level, ParticleHelper.FIRE,
-                    livingTarget.getX(),
-                    livingTarget.getY() + livingTarget.getBbHeight() * 0.5f,
-                    livingTarget.getZ(),
-                    30,
-                    livingTarget.getBbWidth() * 0.5f,
-                    livingTarget.getBbHeight() * 0.5f,
-                    livingTarget.getBbWidth() * 0.5f,
-                    0.03, false);
-
-                EnchantmentHelper.doPostDamageEffects(entity, livingTarget);
+                    EnchantmentHelper.doPostDamageEffects(entity, livingTarget);
+                }
             }
         }
 

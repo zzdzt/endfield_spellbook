@@ -42,9 +42,6 @@ import net.minecraftforge.network.NetworkHooks;
  */
 public class FlameRingEntity extends Entity implements SpellVisualOnly {
 
-    private static final Vec3 WORLD_UP = new Vec3(0, 1, 0);
-    private static final Vec3 WORLD_X = new Vec3(1, 0, 0);
-
     private static final EntityDataAccessor<Float> RADIUS =
         SynchedEntityData.defineId(FlameRingEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Integer> LIFETIME =
@@ -60,7 +57,7 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
 
     // 播放总时长与节奏（5 剑砍 + 6 自传播 + 4 满环燃烧 + 5 溃散）收拢在 {@link FlameRingCastCurve}——时间轴唯一真源。
     // 环心高度（相对生成点脚底）：与幻影魔剑弧心同平面——剑砍出环。
-    public static final float RING_HEIGHT = (float) PhantomBladeEntity.HEIGHT_OFFSET;
+    public static final float RING_HEIGHT = (float) FlameRingGeometry.HEIGHT_OFFSET;
 
     // ---- 粒子编排节奏（客户端，常量置顶待调） ----
     /** 环上火苗的弧向间距（格）——火苗密度即环的密度。 */
@@ -142,7 +139,7 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
         Vec3 center = position().add(0, RING_HEIGHT, 0);
         Vec3 fwd = lookForward();
         Vec3 right = lookRight(fwd);
-        float th0 = getStartAngle() - (float) Math.toDegrees(Math.atan2(fwd.z, fwd.x));
+        float th0 = FlameRingGeometry.relativeStartAngle(getStartAngle(), fwd);
 
         // 环头 = 剑尖（斜面弧线上的当前揭示位置）
         float headTheta = th0 + dir * deg;
@@ -289,35 +286,27 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
 
     /** 施法视线向量（含俯仰，ISS 同款准星跟随）。 */
     private Vec3 lookForward() {
-        return Vec3.directionFromRotation(getLookPitch(), getLookYaw());
+        return FlameRingGeometry.forward(getLookPitch(), getLookYaw());
     }
 
     /** 水平右向：视线 × 世界Up（视线近竖直时退化保护）。 */
     private static Vec3 lookRight(Vec3 fwd) {
-        Vec3 right = fwd.cross(WORLD_UP);
-        if (right.lengthSqr() < 1e-4) {
-            right = fwd.cross(WORLD_X);
-        }
-        return right.normalize();
+        return FlameRingGeometry.right(fwd);
     }
 
     /** 斜面环线上 θ 偏角处的点：环心 + (fwd·cos θ + right·sin θ) × 半径。 */
     private static Vec3 pointOnArc(Vec3 center, Vec3 fwd, Vec3 right, float thetaDeg, float radius) {
-        double rad = Math.toRadians(thetaDeg);
-        return center.add(fwd.scale(Math.cos(rad) * radius))
-            .add(right.scale(Math.sin(rad) * radius));
+        return FlameRingGeometry.pointOnArc(center, fwd, right, thetaDeg, radius);
     }
 
     /** 斜面环线在 θ 处的切向（弧面内，含俯仰分量）。 */
     private static Vec3 arcTangent(Vec3 fwd, Vec3 right, float thetaDeg) {
-        double rad = Math.toRadians(thetaDeg);
-        return fwd.scale(-Math.sin(rad)).add(right.scale(Math.cos(rad))).normalize();
+        return FlameRingGeometry.tangent(fwd, right, thetaDeg);
     }
 
     /** 斜面环线在 θ 处的径向（弧面内，指向环外；与 FlameRingRenderer.radial 同式）。 */
     private static Vec3 radial(Vec3 fwd, Vec3 right, float thetaDeg) {
-        double rad = Math.toRadians(thetaDeg);
-        return fwd.scale(Math.cos(rad)).add(right.scale(Math.sin(rad))).normalize();
+        return FlameRingGeometry.radial(fwd, right, thetaDeg);
     }
 
     public float getRadius() {

@@ -48,8 +48,6 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
         EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
             "flame_ring_v1_fallback", FIRE_RING, false);
 
-    private static final Vec3 WORLD_UP = new Vec3(0, 1, 0);
-    private static final Vec3 WORLD_X = new Vec3(1, 0, 0);
     private static final Vec3 DEFAULT_VERTEX_NORMAL = new Vec3(0, 0, 1);
 
     // ---------- 几何（三层带宽已放大 50%：0.34/0.22/0.10 → 0.51/0.33/0.15） ----------
@@ -158,8 +156,7 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
         Vec3 fwd = lookForward(entity);
         Vec3 right = lookRight(fwd);
         Vec3 planeNormal = fwd.cross(right).normalize();
-        float theta0 = entity.getStartAngle()
-            - (float) Math.toDegrees(Math.atan2(fwd.z, fwd.x));
+        float theta0 = FlameRingGeometry.relativeStartAngle(entity.getStartAngle(), fwd);
         float dir = Math.signum(entity.getSweepAngle());
         if (dir == 0f) dir = 1f;
 
@@ -656,32 +653,23 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
     }
 
     private static Vec3 pointOnArc(Vec3 center, Vec3 fwd, Vec3 right, float thetaDeg, float radius) {
-        double rad = Math.toRadians(thetaDeg);
-        return center
-            .add(fwd.scale(Math.cos(rad) * radius))
-            .add(right.scale(Math.sin(rad) * radius));
+        return FlameRingGeometry.pointOnArc(center, fwd, right, thetaDeg, radius);
     }
 
     private static Vec3 radial(Vec3 fwd, Vec3 right, float thetaDeg) {
-        double rad = Math.toRadians(thetaDeg);
-        return fwd.scale(Math.cos(rad)).add(right.scale(Math.sin(rad))).normalize();
+        return FlameRingGeometry.radial(fwd, right, thetaDeg);
     }
 
     private static Vec3 arcTangent(Vec3 fwd, Vec3 right, float thetaDeg) {
-        double rad = Math.toRadians(thetaDeg);
-        return fwd.scale(-Math.sin(rad)).add(right.scale(Math.cos(rad))).normalize();
+        return FlameRingGeometry.tangent(fwd, right, thetaDeg);
     }
 
     private static Vec3 lookForward(FlameRingEntity entity) {
-        return Vec3.directionFromRotation(entity.getLookPitch(), entity.getLookYaw()).normalize();
+        return FlameRingGeometry.forward(entity.getLookPitch(), entity.getLookYaw());
     }
 
     private static Vec3 lookRight(Vec3 fwd) {
-        Vec3 right = fwd.cross(WORLD_UP);
-        if (right.lengthSqr() < 1e-4) {
-            right = fwd.cross(WORLD_X);
-        }
-        return right.normalize();
+        return FlameRingGeometry.right(fwd);
     }
 
     /** Multiband travelling silhouette noise; fixed spatial samples prevent per-frame random popping. */

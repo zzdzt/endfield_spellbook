@@ -30,14 +30,11 @@ import net.minecraft.util.Mth;
  */
 public class PhantomBladeEntity extends Entity implements SpellVisualOnly, IEntityAdditionalSpawnData {
 
-    private static final Vec3 WORLD_UP = new Vec3(0, 1, 0);
-    private static final Vec3 WORLD_X = new Vec3(1, 0, 0);
-
     private static final EntityDataAccessor<Integer> DURATION =
         SynchedEntityData.defineId(PhantomBladeEntity.class, EntityDataSerializers.INT);
 
     /** 弧心悬浮高度（相对锚点）。对齐 ISS FlameStrike 特效平面：脚 + 0.3×身高 + 0.5 ≈ 1.05。 */
-    public static final double HEIGHT_OFFSET = 1.05;
+    public static final double HEIGHT_OFFSET = FlameRingGeometry.HEIGHT_OFFSET;
     // 播放时长与衔接段占比（SLASH_TICKS / TRANSITION_FRACTION）收拢在 FlameRingCastCurve——魔剑与火环共用时间轴。
 
     /** 投影的主手武器（仅客户端渲染用，走 spawn data）。 */
@@ -100,14 +97,10 @@ public class PhantomBladeEntity extends Entity implements SpellVisualOnly, IEnti
     /** 斜面弧线插值：弧面由施法视线（含俯仰）张成，抬头砍弧随准星翘起；朝向 = 轨迹切向（yRot+xRot）。 */
     private void applyArc(float t) {
         Vec3 center = anchor.add(0, HEIGHT_OFFSET, 0);
-        Vec3 fwd = Vec3.directionFromRotation(lookPitch, lookYaw);
-        Vec3 right = fwd.cross(WORLD_UP);
-        if (right.lengthSqr() < 1e-4) {
-            right = fwd.cross(WORLD_X); // 视线近竖直时退化保护
-        }
-        right = right.normalize();
-        // 弧起点相对视线方向的偏角（度）：由原水平角约定换算到斜面参数角
-        float th0 = startAngle - (float) Math.toDegrees(Math.atan2(fwd.z, fwd.x));
+        Vec3 fwd = FlameRingGeometry.forward(lookPitch, lookYaw);
+        Vec3 right = FlameRingGeometry.right(fwd);
+        // Shared with the fire-ring renderer and hit controller.
+        float th0 = FlameRingGeometry.relativeStartAngle(startAngle, fwd);
 
         if (t < FlameRingCastCurve.TRANSITION_FRACTION) {
             // 衔接：浮位 → 弧起点（easeIn 加速飞出）
@@ -132,17 +125,14 @@ public class PhantomBladeEntity extends Entity implements SpellVisualOnly, IEnti
         Vec3 pos = pointOnArc(center, fwd, right, th);
         this.setPos(pos.x, pos.y, pos.z);
         // 切向 = (-fwd·sin θ + right·cos θ)（弧面内，含俯仰分量）
-        double rad = Math.toRadians(th);
-        Vec3 tangent = fwd.scale(-Math.sin(rad)).add(right.scale(Math.cos(rad))).normalize();
+        Vec3 tangent = FlameRingGeometry.tangent(fwd, right, th);
         this.setYRot((float) Math.toDegrees(Math.atan2(-tangent.x, tangent.z)));
         this.setXRot((float) -Math.toDegrees(Math.asin(Mth.clamp(tangent.y, -1d, 1d))));
     }
 
     /** 斜面弧线上的点：弧心 + (fwd·cos θ + right·sin θ) × 半径（θ 为相对视线的偏角，度）。 */
     private Vec3 pointOnArc(Vec3 center, Vec3 fwd, Vec3 right, float thetaDeg) {
-        double rad = Math.toRadians(thetaDeg);
-        return center.add(fwd.scale(Math.cos(rad) * arcRadius))
-            .add(right.scale(Math.sin(rad) * arcRadius));
+        return FlameRingGeometry.pointOnArc(center, fwd, right, thetaDeg, arcRadius);
     }
 
     // 渲染参数（客户端）
