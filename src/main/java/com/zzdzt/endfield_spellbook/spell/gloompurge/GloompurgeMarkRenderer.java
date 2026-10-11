@@ -442,7 +442,7 @@ public class GloompurgeMarkRenderer extends EntityRenderer<GloompurgeMarkEntity>
 
     private static final int   MIST_SEGMENTS = 32;
     private static final float MIST_HEIGHT_SCALE = 0.42f;
-    private static final float MIST_ALPHA = 0.05f;
+    private static final float MIST_ALPHA = 0.02f;
     private static final float MIST_FLOW_SPEED = 0.0025f; // UV v 涌动（极慢，配合摆动）
     private static final float MIST_SWAY = 0.06f;         // 涌动的呼吸摆动幅度（v 单位）
 
@@ -535,7 +535,7 @@ public class GloompurgeMarkRenderer extends EntityRenderer<GloompurgeMarkEntity>
             // 跟随所在方位的雾顶高度（与 drawMistVeil 同一噪声）→ 蒸发点贴着当地雾缘升起
             float hs = 0.65f + 0.30f * pNoise(ang / Mth.TWO_PI * 3f, f * 0.006f, 3f, 71);
             float y = H * hs * (0.5f + 0.75f * frac);
-            float a = alpha * 0.10f * breathe * Mth.sin(frac * (float) Math.PI);
+            float a = alpha * 0.04f * breathe * Mth.sin(frac * (float) Math.PI);
             // ⚠️ 不跳过低 alpha 顶点：保证被调用时恒有顶点（空 batch 铁律）
             float size = 0.06f + 0.10f * hash01(seed, i * 7 + 3);
             float rad = R0 * (0.99f + 0.03f * hash01(seed, i * 7 + 4));

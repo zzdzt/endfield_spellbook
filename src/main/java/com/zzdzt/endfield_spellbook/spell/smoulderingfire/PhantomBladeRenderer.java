@@ -76,9 +76,11 @@ public class PhantomBladeRenderer extends EntityRenderer<PhantomBladeEntity> {
     @Override
     public boolean shouldRender(PhantomBladeEntity entity, net.minecraft.client.renderer.culling.Frustum camera,
                                 double camX, double camY, double camZ) {
+        // 斩击弧随 radius 扩大（强化焚灭最大 1.5 倍）；剔除范围必须覆盖整段模型轨迹。
+        double r = Math.max(4.0, entity.getArcRadius() + 1.5);
         return camera.isVisible(new AABB(
-            entity.getX() - 4, entity.getY() - 2, entity.getZ() - 4,
-            entity.getX() + 4, entity.getY() + 3, entity.getZ() + 4));
+            entity.getX() - r, entity.getY() - r, entity.getZ() - r,
+            entity.getX() + r, entity.getY() + r, entity.getZ() + r));
     }
 
     @Override

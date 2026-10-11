@@ -13,6 +13,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkHooks;
 
@@ -55,7 +56,7 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
     private static final EntityDataAccessor<Float> LOOK_YAW =
         SynchedEntityData.defineId(FlameRingEntity.class, EntityDataSerializers.FLOAT);
 
-    // 播放总时长与节奏（5 剑砍 + 6 自传播 + 4 满环燃烧 + 5 溃散）收拢在 {@link FlameRingCastCurve}——时间轴唯一真源。
+    // 播放总时长与节奏（4 剑砍 + 5 自传播 + 3 满环燃烧 + 4 溃散）收拢在 {@link FlameRingCastCurve}——时间轴唯一真源。
     // 环心高度（相对生成点脚底）：与幻影魔剑弧心同平面——剑砍出环。
     public static final float RING_HEIGHT = (float) FlameRingGeometry.HEIGHT_OFFSET;
 
@@ -178,7 +179,7 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
         }
 
         // P4.2：闭环后将最初的收尾点保留为视觉焦点，满环燃烧期间每隔一 tick 补充短促的火焰与余烬。
-        // 不改变几何揭示进度，也不额外延长 FlameRingCastCurve 的 4 tick 满环燃烧时长。
+        // 不改变几何揭示进度，也不额外延长 FlameRingCastCurve.BURN_TICKS 的满环燃烧时长。
         if (burning && (tickCount & 1) == 0) {
             level().addParticle(ParticleTypes.FLAME, head.x, head.y, head.z,
                 tangent.x * 0.045, 0.025, tangent.z * 0.045);
@@ -358,9 +359,23 @@ public class FlameRingEntity extends Entity implements SpellVisualOnly {
         return NetworkHooks.getEntitySpawningPacket(this);
     }
 
+    /**
+     * 火环的真实弧面明显大于注册实体的小碰撞盒；扩大剔除盒，避免环面斜置时
+     * 只因实体中心离开视锥就被提前裁掉。
+     */
     @Override
-    public boolean shouldRender(double pX, double pY, double pZ) {
-        return true;
+    public AABB getBoundingBoxForCulling() {
+        double cullingRadius = Math.max(4.0, getRadius() + 1.5);
+        return super.getBoundingBoxForCulling().inflate(cullingRadius, cullingRadius, cullingRadius);
+    }
+
+    /**
+     * 保留距离剔除；按实际环半径提供比默认 0.5 格实体盒更合适的可见距离。
+     */
+    @Override
+    public boolean shouldRenderAtSqrDistance(double distanceToCamera) {
+        double renderDistance = Math.max(64.0, (getRadius() + 1.5) * 16.0);
+        return distanceToCamera < renderDistance * renderDistance;
     }
 
     @Override

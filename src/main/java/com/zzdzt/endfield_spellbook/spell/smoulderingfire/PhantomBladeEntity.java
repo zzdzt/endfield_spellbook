@@ -12,6 +12,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.entity.IEntityAdditionalSpawnData;
 import net.minecraftforge.network.NetworkHooks;
@@ -186,9 +187,24 @@ public class PhantomBladeEntity extends Entity implements SpellVisualOnly, IEnti
         this.setXRot(xRot);
     }
 
+    /**
+     * 幻影剑的模型轨迹远大于注册实体盒，剔除盒需覆盖完整挥砍半径。
+     */
     @Override
-    public boolean shouldRender(double pX, double pY, double pZ) {
-        return true;
+    public AABB getBoundingBoxForCulling() {
+        double r = Math.max(4.0, arcRadius + 1.5);
+        return new AABB(
+            getX() - r, getY() - r, getZ() - r,
+            getX() + r, getY() + r, getZ() + r);
+    }
+
+    /**
+     * 保留距离剔除，同时按弧半径扩大有效距离，避免小实体盒过早消失。
+     */
+    @Override
+    public boolean shouldRenderAtSqrDistance(double distanceToCamera) {
+        double renderDistance = Math.max(64.0, (arcRadius + 1.5) * 16.0);
+        return distanceToCamera < renderDistance * renderDistance;
     }
 
     @Override

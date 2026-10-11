@@ -5,6 +5,8 @@ import com.zzdzt.endfield_spellbook.element.EndfieldElement;
 import com.zzdzt.endfield_spellbook.element.EndfieldElements;
 import com.zzdzt.endfield_spellbook.element.PlayerChargeType;
 import com.zzdzt.endfield_spellbook.element.PlayerCharges;
+import com.zzdzt.endfield_spellbook.registry.EntityRegistry;
+import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanBlastVisualEntity;
 import io.redspace.ironsspellbooks.api.config.DefaultConfig;
 import io.redspace.ironsspellbooks.api.magic.MagicData;
 import io.redspace.ironsspellbooks.api.registry.SchoolRegistry;
@@ -59,7 +61,8 @@ public class WindArrowSpell extends AbstractSpell {
     private static final int RECAST_LIFETIME_TICKS = 20 * 5;
     private static final float DIRECT_DAMAGE_COEFFICIENT = 1.0f;
     private static final float NATURE_EMPOWER_COEFFICIENT = 1.6f;
-    private static final float TRAIL_STEP = 0.65f;
+    // 风矢采用更饱和的提弗洛斯电蓝；旧 blast 使用自己的默认 tint，不受影响。
+    private static final float[] ARROW_BEAM_TINT = {0.18f, 0.36f, 1.0f};
 
     private final DefaultConfig defaultConfig = new DefaultConfig()
         .setMinRarity(SpellRarity.UNCOMMON)
@@ -158,21 +161,25 @@ public class WindArrowSpell extends AbstractSpell {
             // 让本轮箭矢可以按原有逻辑触发强化与资源奖励。
             PlayerCharges.consume(caster, PlayerChargeType.HUNTING_ARROWS, 1);
 
-            boolean empoweredThisRound = fireRound(serverLevel, caster, spellLevel);
-            if (rewardArrowIfPossible(caster, empoweredThisRound)) {
+            int remainingRecastsBeforeAttack = getRemainingRecasts(recasts);
+            RoundResult roundResult = fireRound(serverLevel, caster, spellLevel);
+            boolean refunded = rewardArrowIfPossible(caster, roundResult.empowered);
+            if (refunded) {
                 // 暂时返还 1 次 remainingRecasts；ISS 随后自动递减时抵消本轮消耗。
                 // 不修改 totalRecasts，因此不会增加 Recast 上限。
                 refundActiveRecast(recasts);
             }
+
+            // 只有确实耗尽本轮后可用次数、且没有回充 Recast 时，才将最后一支命中箭升级为终结爆发。
+            if (remainingRecastsBeforeAttack <= 1 && !refunded && roundResult.lastHitBeam != null) {
+                roundResult.lastHitBeam.setVisualStyle(LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_FINAL_HIT);
+            }
         }
 
-        // 首次施法启动起飞；后续每次攻击 Recast 都刷新 30 秒滑动期限。
-        // 起飞状态绑定真实 Recast 生命周期；次数耗尽或超时后由飞行控制器恢复玩家状态。
+        // 首次施法启动起飞；后续每次攻击 Recast 都刷新 5 秒滑动期限。
+        // 起飞状态严格绑定真实 Recast 生命周期；次数耗尽或超时后由飞行控制器恢复玩家状态。
         if (caster instanceof ServerPlayer serverPlayer) {
-            boolean tiedToRecast = recastCast || recasts.hasRecastForSpell(getSpellId());
-            WindArrowFlightController.startOrRefresh(
-                serverPlayer, tiedToRecast, RECAST_LIFETIME_TICKS
-            );
+            WindArrowFlightController.startOrRefresh(serverPlayer, RECAST_LIFETIME_TICKS);
         }
 
         super.onCast(level, spellLevel, caster, castSource, magicData);
@@ -193,6 +200,14 @@ public class WindArrowSpell extends AbstractSpell {
     }
 
     /**
+     * 读取 ISS 当前 Recast 的剩余次数；沿用序列化数据，避免跨包访问 protected 字段。
+     */
+    private int getRemainingRecasts(PlayerRecasts recasts) {
+        RecastInstance instance = recasts.getRecastInstance(getSpellId());
+        return instance == null ? 0 : Math.max(0, instance.serializeNBT().getInt("remainingRecasts"));
+    }
+
+    /**
      * 返还本轮消耗的 Recast 使用次数。ISS 在 onCast 返回后会自动减 1，
      * 因此只增加 remainingRecasts，不增加 totalRecasts；最终可用次数保持不变。
      */
@@ -206,10 +221,20 @@ public class WindArrowSpell extends AbstractSpell {
         // AbstractSpell.castSpell 随后会调用 decrementRecastCount，并同步最终状态。
     }
 
+    private static final class RoundResult {
+        final boolean empowered;
+        @Nullable final LizhiYanBlastVisualEntity lastHitBeam;
+
+        RoundResult(boolean empowered, @Nullable LizhiYanBlastVisualEntity lastHitBeam) {
+            this.empowered = empowered;
+            this.lastHitBeam = lastHitBeam;
+        }
+    }
+
     /**
      * 主箭严格按准星射线；副箭另行智能选敌。每轮最多两支箭，服务器负责命中与伤害。
      */
-    private boolean fireRound(ServerLevel level, LivingEntity caster, int spellLevel) {
+    private RoundResult fireRound(ServerLevel level, LivingEntity caster, int spellLevel) {
         Vec3 eye = caster.getEyePosition();
         HitResult mainHit = Utils.raycastForEntity(level, caster, MAIN_RANGE, true);
         Vec3 mainEnd = mainHit.getLocation();
@@ -220,25 +245,33 @@ public class WindArrowSpell extends AbstractSpell {
             && isLegalTarget(caster, living)) {
             mainTarget = living;
         }
-        spawnArrowTrail(level, eye, mainEnd);
+        LizhiYanBlastVisualEntity mainBeam = spawnArrowBeam(level, eye, mainEnd,
+            mainTarget != null ? LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT
+                : LizhiYanBlastVisualEntity.STYLE_WIND_ARROW);
         level.playSound(null, caster.blockPosition(), SoundEvents.ARROW_SHOOT,
             SoundSource.PLAYERS, 0.55f, 1.35f);
 
         float spellPower = getSpellPower(spellLevel, caster);
         boolean empowered = false;
+        LizhiYanBlastVisualEntity lastHitBeam = null;
         if (mainTarget != null) {
             empowered |= hitWithArrow(level, caster, mainTarget, spellPower);
+            lastHitBeam = mainBeam;
         }
 
         LivingEntity secondary = findSecondaryTarget(level, caster, mainTarget);
         if (secondary != null) {
             Vec3 secondaryEnd = secondary.getBoundingBox().getCenter();
-            spawnArrowTrail(level, eye, secondaryEnd);
+            LizhiYanBlastVisualEntity secondaryBeam = spawnArrowBeam(level, eye, secondaryEnd,
+                LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT);
             level.playSound(null, caster.blockPosition(), SoundEvents.ARROW_SHOOT,
                 SoundSource.PLAYERS, 0.42f, 1.65f);
             empowered |= hitWithArrow(level, caster, secondary, spellPower);
+            if (secondaryBeam != null) {
+                lastHitBeam = secondaryBeam;
+            }
         }
-        return empowered;
+        return new RoundResult(empowered, lastHitBeam);
     }
 
     private static boolean isLegalTarget(LivingEntity caster, LivingEntity target) {
@@ -323,9 +356,6 @@ public class WindArrowSpell extends AbstractSpell {
         }
 
         hurtWithNatureMagic(level, caster, target, spellPower * DIRECT_DAMAGE_COEFFICIENT);
-        level.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT,
-            target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
-            8, 0.18, 0.25, 0.18, 0.08);
         return empowered;
     }
 
@@ -350,13 +380,25 @@ public class WindArrowSpell extends AbstractSpell {
             0.2f, 0.25f, 0.2f, 0.2f, true);
     }
 
-    private static void spawnArrowTrail(ServerLevel level, Vec3 start, Vec3 end) {
-        Vec3 delta = end.subtract(start);
-        int steps = Math.max(1, (int) Math.ceil(delta.length() / TRAIL_STEP));
-        for (int i = 1; i <= steps; i++) {
-            Vec3 point = start.add(delta.scale((double) i / steps));
-            level.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT,
-                point.x, point.y, point.z, 1, 0.015, 0.015, 0.015, 0.005);
+    /**
+     * 复用项目内 blast 视觉实体作为载体，但风矢走独立的蓝白主束/螺旋环列渲染样式。
+     * 主箭和副箭分别按自身终点定向；命中闪光随箭矢端点出现，最后一支未被 Recast 回充抵消的命中箭升级为放射爆发。
+     * 仅替换表现层，不改变命中、伤害、元素结算、猎矢奖励或 Recast 规则。
+     */
+    private static @Nullable LizhiYanBlastVisualEntity spawnArrowBeam(
+        ServerLevel level, Vec3 start, Vec3 end, int visualStyle) {
+        // 与项目内 blast 光束保持一致：起点由眼睛位置向下偏移 0.75 格。
+        Vec3 beamStart = start.subtract(0.0, 0.75, 0.0);
+        Vec3 delta = end.subtract(beamStart);
+        if (delta.lengthSqr() < 1.0e-6) {
+            return null;
         }
+
+        LizhiYanBlastVisualEntity beam = new LizhiYanBlastVisualEntity(
+            EntityRegistry.LIZHI_YAN_BLAST_VISUAL.get(),
+            level, beamStart, end, delta.normalize(), ARROW_BEAM_TINT, visualStyle
+        );
+        level.addFreshEntity(beam);
+        return beam;
     }
 }

@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>起跳方式参考 ISS Ascension：施加一次向上冲量并同步给客户端，不授予创造飞行权限。
  * 浮空期间通过 WindArrowFloatEffect 将重力属性降为零；到达目标高度后停止垂直运动。
- * 状态由真实 ISS Recast 生命周期管理，超时、次数耗尽和异常退出都会清理效果。
+ * 状态严格绑定真实 ISS Recast 生命周期，并由 5 秒滑动期限兜底；次数耗尽、超时和异常退出都会清理效果。
  */
 @EventBusSubscriber(modid = EndfieldSpellbook.MOD_ID)
 public final class WindArrowFlightController {
@@ -50,7 +50,7 @@ public final class WindArrowFlightController {
     /**
      * 开始起跳或刷新现有浮空期限。此方法只在服务端法术施放流程中调用。
      */
-    public static void startOrRefresh(ServerPlayer player, boolean tiedToRecast, int lifetimeTicks) {
+    public static void startOrRefresh(ServerPlayer player, int lifetimeTicks) {
         if (!player.isAlive() || lifetimeTicks <= 0) {
             return;
         }
@@ -62,14 +62,13 @@ public final class WindArrowFlightController {
         LANDING_PROTECTION.remove(playerId);
         if (current != null) {
             current.expiresAt = now + lifetimeTicks;
-            current.recastBound |= tiedToRecast;
             applyOrRefreshFloatEffect(player, lifetimeTicks);
             return;
         }
 
         double maxY = player.level().getMaxBuildHeight() - player.getBbHeight() - 1.0;
         double targetY = Math.max(player.getY(), Math.min(player.getY() + ASCENT_HEIGHT, maxY));
-        FlightState state = new FlightState(targetY, now + lifetimeTicks, tiedToRecast);
+        FlightState state = new FlightState(targetY, now + lifetimeTicks);
         ACTIVE.put(playerId, state);
 
         // 用属性效果实现真正的零重力，不设置 Entity.noGravity，也不授予 mayfly/flying。
@@ -128,7 +127,7 @@ public final class WindArrowFlightController {
 
         boolean recastStillActive = MagicData.getPlayerMagicData(player)
             .getPlayerRecasts().hasRecastForSpell(SPELL_ID.toString());
-        if (now >= state.expiresAt || (state.recastBound && !recastStillActive)) {
+        if (now >= state.expiresAt || !recastStillActive) {
             // 次数耗尽或超时属于正常结束：恢复重力，但保护到安全触地为止。
             stop(player, true);
             return;
@@ -248,14 +247,12 @@ public final class WindArrowFlightController {
 
     private static final class FlightState {
         private final double targetY;
-        private boolean recastBound;
         private boolean hovering;
         private long expiresAt;
 
-        private FlightState(double targetY, long expiresAt, boolean recastBound) {
+        private FlightState(double targetY, long expiresAt) {
             this.targetY = targetY;
             this.expiresAt = expiresAt;
-            this.recastBound = recastBound;
         }
     }
 }

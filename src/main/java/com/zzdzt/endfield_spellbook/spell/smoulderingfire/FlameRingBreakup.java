@@ -20,7 +20,7 @@ public final class FlameRingBreakup {
     private FlameRingBreakup() {
     }
 
-    /** Stable per-fragment threshold, spread across the five-tick dissolve window. */
+    /** Stable per-fragment threshold, spread across the shared dissolve window. */
     public static float threshold(int fragment, int entityId) {
         return BREAK_THRESHOLD_MIN + BREAK_THRESHOLD_SPAN * hash01(fragment, 0, entityId);
     }

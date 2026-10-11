@@ -107,22 +107,22 @@ public class EntityRegistry {
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "ink_waterfall").toString())
         );
 
-    // 幻影魔剑（焚灭 × 主手武器协同，纯视觉投影横扫）
+    // 幻影魔剑（焚灭 × 主手武器协同，纯视觉投影横扫；10 个 tracking units 限制远距离复制）
     public static final RegistryObject<EntityType<PhantomBladeEntity>> PHANTOM_BLADE =
         ENTITY_TYPES.register("phantom_blade", () ->
             EntityType.Builder.<PhantomBladeEntity>of(PhantomBladeEntity::new, MobCategory.MISC)
                 .sized(0.5f, 0.5f)
-                .clientTrackingRange(64)
+                .clientTrackingRange(10)
                 .updateInterval(1)
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "phantom_blade").toString())
         );
 
-    // 焚灭火环（魔剑协同·斩击贴地燃烧火环，纯视觉序列帧）
+    // 焚灭火环（魔剑协同·斩击贴地燃烧火环，纯视觉序列帧；10 个 tracking units 限制远距离复制）
     public static final RegistryObject<EntityType<FlameRingEntity>> FLAME_RING =
         ENTITY_TYPES.register("flame_ring", () ->
             EntityType.Builder.<FlameRingEntity>of(FlameRingEntity::new, MobCategory.MISC)
                 .sized(0.5f, 0.5f)
-                .clientTrackingRange(64)
+                .clientTrackingRange(10)
                 .updateInterval(20)
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "flame_ring").toString())
         );
