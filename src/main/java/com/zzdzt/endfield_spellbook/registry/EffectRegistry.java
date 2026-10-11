@@ -9,6 +9,7 @@ import com.zzdzt.endfield_spellbook.effect.FrozenEffect;
 import com.zzdzt.endfield_spellbook.effect.HeatVulnerableEffect;
 import com.zzdzt.endfield_spellbook.effect.LiquidNitrogenMarkedEffect;
 import com.zzdzt.endfield_spellbook.effect.MoltenFireMarkEffect;
+import com.zzdzt.endfield_spellbook.effect.WindArrowFloatEffect;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
@@ -23,7 +24,6 @@ public final class EffectRegistry {
         EFFECTS.register("liquid_nitrogen_marked", LiquidNitrogenMarkedEffect::new);
 
     // ========== 元素异常（燃烧/导电/腐蚀） ==========
-
     public static final RegistryObject<MobEffect> COMBUSTION =
         EFFECTS.register("combustion", CombustionEffect::new);
 
@@ -42,8 +42,11 @@ public final class EffectRegistry {
     public static final RegistryObject<MobEffect> HEAT_VULNERABLE =
         EFFECTS.register("heat_vulnerable", HeatVulnerableEffect::new);
 
-    // ========== 指定研究对象 ==========
+    /** 风矢穿林的零重力浮空；生命周期由真实 Recast 控制。 */
+    public static final RegistryObject<MobEffect> WIND_ARROW_FLOAT =
+        EFFECTS.register("wind_arrow_float", WindArrowFloatEffect::new);
 
+    // ========== 指定研究对象 ==========
     /** 聚焦 HUD 标记（纯显示，施加/移除由 FocusMarkEntity 托管）。 */
     public static final RegistryObject<MobEffect> FOCUSED =
         EFFECTS.register("focused", FocusedEffect::new);

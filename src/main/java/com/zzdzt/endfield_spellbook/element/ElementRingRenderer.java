@@ -42,9 +42,9 @@ public class ElementRingRenderer extends EntityRenderer<ElementRingEntity> {
     public void render(ElementRingEntity entity, float yaw, float partialTicks,
                        PoseStack poseStack, MultiBufferSource bufferSource, int light) {
         float f = entity.tickCount + partialTicks;
-        int lifetime = Math.max(1, entity.getLifetime());
-        // 尾 10 tick 线性淡出（服务端 discard 前的视觉缓冲）
-        float fade = Mth.clamp((lifetime - f) / 10f, 0f, 1f);
+        int expireTick = Math.max(1, entity.getExpireTick());
+        // 尾 10 tick 线性淡出（服务端 discard 前的视觉缓冲）；实体复用后截止年龄会更新。
+        float fade = Mth.clamp((expireTick - f) / 10f, 0f, 1f);
         float radius = entity.getRadius();
         int stacks = Math.min(4, Math.max(0, entity.getStacks()));
         float[] col = entity.getElement().particleColor();

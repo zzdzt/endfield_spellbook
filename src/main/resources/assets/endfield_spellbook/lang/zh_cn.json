@@ -68,6 +68,12 @@
   "entity.endfield_spellbook.bloodwing": "衔火血翼",
   "death.attack.endfield_spellbook.bloodwing": "%1$s被%2$s的衔火血翼焚尽了",
 
+  "spell.endfield_spellbook.wind_arrow": "风矢穿林",
+  "spell.endfield_spellbook.wind_arrow.guide": "首次施放免费射出主箭，并向前方寻找另一名敌人发射智能副箭。后续施放消耗 1 支猎矢。命中自然附着目标时，消耗 1 层自然附着并造成按消耗前层数计算的强化自然法术爆发；每轮最多返还 1 支猎矢并奖励 1 次额外施放。",
+  "spell.endfield_spellbook.wind_arrow.info.empower": "自然强化爆发：%s",
+  "spell.endfield_spellbook.wind_arrow.info.arrows": "当前猎矢：%s",
+  "item.endfield_spellbook.scroll_wind_arrow": "风矢穿林卷轴",
+
   "spell.endfield_spellbook.designated_subject": "指定研究对象",
   "spell.endfield_spellbook.designated_subject.guide": "锁定一名敌人，对其施加长时间聚焦。聚焦期间，该敌人每次受到元素附着时，都会自动再附加一层同元素附着——层数增长与法术爆发加倍。同一目标只能被一名施法者聚焦，再次施法可转移或刷新聚焦",
   "spell.endfield_spellbook.designated_subject.info.rule": "聚焦的敌人受到附着时自动附加一层；同目标后者覆盖前者",

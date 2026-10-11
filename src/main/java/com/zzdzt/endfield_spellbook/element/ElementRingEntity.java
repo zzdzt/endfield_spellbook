@@ -14,6 +14,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.entity.IEntityAdditionalSpawnData;
 import net.minecraftforge.network.NetworkHooks;
@@ -26,7 +27,7 @@ import java.util.UUID;
  *
  * <p>服务端 tick 跟随目标位置：水平方向三段式（常规速度贴合 → 跳变按比例滑行 →
  * 超过瞬移阈值直接归位），垂直方向锁定跳跃弧线（跑跳不带动弧环）。
- * 目标死亡/移除即消散；寿命 = 附着剩余时间，到点淡出。
+ * 目标死亡/移除即消散；寿命 = 附着剩余时间 + 10 tick 淡出缓冲。
  * 纯视觉（{@link SpellVisualOnly}），不存档、无碰撞。
  */
 public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnData, SpellVisualOnly {
@@ -37,7 +38,8 @@ public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnD
         SynchedEntityData.defineId(ElementRingEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Float> RADIUS =
         SynchedEntityData.defineId(ElementRingEntity.class, EntityDataSerializers.FLOAT);
-    private static final EntityDataAccessor<Integer> LIFETIME =
+    /** 服务端绝对实体年龄截止值；刷新附着时延长，而不是重建实体。 */
+    private static final EntityDataAccessor<Integer> EXPIRE_TICK =
         SynchedEntityData.defineId(ElementRingEntity.class, EntityDataSerializers.INT);
 
     private UUID targetId;
@@ -70,16 +72,43 @@ public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnD
         this.entityData.set(ELEMENT, element.ordinal());
         this.entityData.set(STACKS, stacks);
         this.entityData.set(RADIUS, radius);
-        this.entityData.set(LIFETIME, lifetime);
+        this.entityData.set(EXPIRE_TICK, Math.max(1, lifetime));
     }
 
     @Override
     public void tick() {
         this.baseTick();
-        // 尾 10 tick 淡出（GloompurgeMarkEntity 同款机制）
+        // 客户端只负责渲染；服务端跟踪目标并管理实体寿命。
         if (level().isClientSide) return;
-        if (tickCount >= getLifetime() - 10 || !followTarget()) {
+
+        if (!followTarget()) {
+            clearTargetRingReference();
             discard();
+            return;
+        }
+
+        // 最后 10 tick 由渲染器淡出；只在过期年龄到达时移除实体。
+        if (tickCount >= getExpireTick()) {
+            clearTargetRingReference();
+            discard();
+        }
+    }
+
+    /** 自然到期时清除目标上的临时 UUID 回链，避免把已不存在的实体 UUID 长期留在存档中。 */
+    private void clearTargetRingReference() {
+        if (targetId == null || !(level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+
+        Entity target = serverLevel.getEntity(targetId);
+        if (!(target instanceof LivingEntity living)) {
+            return;
+        }
+
+        var data = living.getPersistentData();
+        if (data.hasUUID(EndfieldElements.RING_ENTITY_UUID)
+            && getUUID().equals(data.getUUID(EndfieldElements.RING_ENTITY_UUID))) {
+            data.remove(EndfieldElements.RING_ENTITY_UUID);
         }
     }
 
@@ -138,8 +167,26 @@ public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnD
         return entityData.get(RADIUS);
     }
 
-    public int getLifetime() {
-        return entityData.get(LIFETIME);
+    /** 绝对实体年龄截止值（tickCount 到达该值前 10 tick 开始淡出）。 */
+    public int getExpireTick() {
+        return entityData.get(EXPIRE_TICK);
+    }
+
+    /**
+     * 更新现有弧环，而不是销毁后重新生成。
+     *
+     * <p>同步字段通过 SynchedEntityData 发送到追踪客户端；过期年龄基于当前服务器实体年龄
+     * 重新计算，因此持续叠层/消耗时不会让旧实体提前淡出。
+     */
+    public void refreshVisualState(EndfieldElement element, int stacks, float radius, int lifetimeTicks) {
+        if (level().isClientSide || isRemoved()) {
+            return;
+        }
+
+        entityData.set(ELEMENT, element.ordinal());
+        entityData.set(STACKS, Math.max(0, Math.min(4, stacks)));
+        entityData.set(RADIUS, Math.max(0.1f, radius));
+        entityData.set(EXPIRE_TICK, tickCount + Math.max(1, lifetimeTicks));
     }
 
     @Nullable
@@ -157,7 +204,7 @@ public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnD
         this.entityData.define(ELEMENT, 0);
         this.entityData.define(STACKS, 1);
         this.entityData.define(RADIUS, 0.9f);
-        this.entityData.define(LIFETIME, 160);
+        this.entityData.define(EXPIRE_TICK, 160);
     }
 
     // 存档（不存档，仅同步）
@@ -183,7 +230,7 @@ public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnD
         buffer.writeInt(entityData.get(ELEMENT));
         buffer.writeInt(entityData.get(STACKS));
         buffer.writeFloat(entityData.get(RADIUS));
-        buffer.writeInt(entityData.get(LIFETIME));
+        buffer.writeInt(entityData.get(EXPIRE_TICK));
     }
 
     @Override
@@ -192,12 +239,27 @@ public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnD
         this.entityData.set(ELEMENT, buffer.readInt());
         this.entityData.set(STACKS, buffer.readInt());
         this.entityData.set(RADIUS, buffer.readFloat());
-        this.entityData.set(LIFETIME, buffer.readInt());
+        this.entityData.set(EXPIRE_TICK, buffer.readInt());
     }
 
+    /**
+     * 弧环绘制半径远大于注册实体的 0.2 格碰撞盒，扩大专用剔除包围盒，避免圆环边缘
+     * 在视锥边界被提前裁掉。正常视锥剔除仍由 EntityRenderer 执行。
+     */
     @Override
-    public boolean shouldRender(double pX, double pY, double pZ) {
-        return true;
+    public AABB getBoundingBoxForCulling() {
+        double cullingRadius = Math.max(1.0, getRadius() * 1.15 + 0.15);
+        return super.getBoundingBoxForCulling().inflate(cullingRadius, 0.3, cullingRadius);
+    }
+
+    /**
+     * 注册实体很小，但视觉弧环必须保持合理的可见距离。
+     * 仍保留距离剔除；不再像旧版 shouldRender() 一样无条件通过距离判断。
+     */
+    @Override
+    public boolean shouldRenderAtSqrDistance(double distanceToCamera) {
+        double renderDistance = Math.max(64.0, getRadius() * 64.0);
+        return distanceToCamera < renderDistance * renderDistance;
     }
 
     @Override

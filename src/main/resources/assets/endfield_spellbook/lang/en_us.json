@@ -68,6 +68,12 @@
   "entity.endfield_spellbook.bloodwing": "Fire Bloodwing",
   "death.attack.endfield_spellbook.bloodwing": "%1$s was burnt to ash by %2$s's Bloodwing",
 
+  "spell.endfield_spellbook.wind_arrow": "Wind Arrow Through the Grove",
+  "spell.endfield_spellbook.wind_arrow.guide": "The first cast fires a free main arrow and a smart secondary arrow at another enemy ahead. Later casts consume 1 Hunting Arrow. Hitting a Nature-inflicted target consumes 1 Nature stack and deals an empowered Nature magic burst based on the pre-consumption stack count. Each round can grant at most 1 Hunting Arrow and 1 extra cast.",
+  "spell.endfield_spellbook.wind_arrow.info.empower": "Nature Empowered Burst: %s",
+  "spell.endfield_spellbook.wind_arrow.info.arrows": "Hunting Arrows: %s",
+  "item.endfield_spellbook.scroll_wind_arrow": "Scroll of Wind Arrow Through the Grove",
+
   "spell.endfield_spellbook.designated_subject": "Designated Subject",
   "spell.endfield_spellbook.designated_subject.guide": "Lock onto an enemy and keep it focused for a long duration. While focused, every elemental infliction applied to the target automatically gains one extra stack of the same element - stack growth and spell bursts are doubled. A target can only be focused by one caster at a time; cast again to move or refresh the focus",
   "spell.endfield_spellbook.designated_subject.info.rule": "Focused enemies gain an extra stack per infliction; the latest focus overrides the previous one",

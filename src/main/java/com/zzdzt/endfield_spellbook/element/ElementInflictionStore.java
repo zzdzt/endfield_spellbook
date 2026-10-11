@@ -42,6 +42,11 @@ public final class ElementInflictionStore {
         return target.getPersistentData().getInt(NBT_STACKS);
     }
 
+    /** 当前附着过期的游戏时间；调用方应先检查 isValid。 */
+    public static long getExpireAtGameTime(LivingEntity target) {
+        return target.getPersistentData().getLong(NBT_EXPIRE);
+    }
+
     /** 写入附着（层数与过期时间由调用方算好）。 */
     public static void set(LivingEntity target, EndfieldElement element, int stacks, long expireAtGameTime) {
         CompoundTag data = target.getPersistentData();

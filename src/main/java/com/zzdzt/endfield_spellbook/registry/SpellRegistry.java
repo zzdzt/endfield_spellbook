@@ -12,6 +12,7 @@ import com.zzdzt.endfield_spellbook.spell.test.TestApplyCryoSpell;
 import com.zzdzt.endfield_spellbook.spell.test.TestApplyElectricSpell;
 import com.zzdzt.endfield_spellbook.spell.test.TestApplyHeatSpell;
 import com.zzdzt.endfield_spellbook.spell.test.TestApplyNatureSpell;
+import com.zzdzt.endfield_spellbook.spell.windarrow.WindArrowSpell;
 
 import io.redspace.ironsspellbooks.api.spells.AbstractSpell;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -53,6 +54,10 @@ public class SpellRegistry {
 
     public static final RegistryObject<AbstractSpell> TEST_APPLY_NATURE =
         SPELLS.register("test_apply_nature", TestApplyNatureSpell::new);
+
+    // ========== 风矢穿林 ==========
+    public static final RegistryObject<AbstractSpell> WIND_ARROW =
+        SPELLS.register("wind_arrow", WindArrowSpell::new);
 
     // ========== 驱火焚影 ==========
     public static final RegistryObject<AbstractSpell> BLOODWING =

@@ -136,7 +136,7 @@ public class FlameRingRenderer extends EntityRenderer<FlameRingEntity> {
         // 溃散进度：0 = 正常；1 = 完全解体。
         float breakup = Mth.clamp((age - fadeStart) / (float) FlameRingCastCurve.FADE_TICKS, 0f, 1f);
 
-        // P4.4：只在完整环的 4 tick 燃烧窗内驱动一次平滑呼吸；窗口前后脉冲归零，
+        // P4.4：只在完整环的 BURN_TICKS 燃烧窗内驱动一次平滑呼吸；窗口前后脉冲归零，
         // 因而不改变 Reveal Curve，不会在传播末帧或溃散首帧产生亮度跳变。
         float burnStart = FlameRingCastCurve.SLASH_TICKS + FlameRingCastCurve.PROPAGATE_TICKS;
         boolean fullRingBurning = revealDeg >= 359f && age >= burnStart && age < fadeStart;

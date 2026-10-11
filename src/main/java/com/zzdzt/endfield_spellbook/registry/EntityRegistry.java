@@ -65,15 +65,15 @@ public class EntityRegistry {
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "lnc_projectile").toString())
         );
 
-    // 元素附着弧环（附着层数视觉，跟随目标）
-    // ⚠️ updateInterval 必须 = 1：弧环有自主滑行轨迹，低频同步会呈现"滑3停1"的锯齿感
-    // 元素附着弧环（附着层数视觉，跟随目标）
+    // 元素附着弧环（附着层数视觉，跟随目标）。
+    // 跟随滑行是逐 tick 更新的位置轨迹；现在通过复用单个实体减少 spawn/discard 开销，
+    // 因此保留逐 tick 同步以避免低频位置包带来的停顿感。
     public static final RegistryObject<EntityType<ElementRingEntity>> ELEMENT_RING =
         ENTITY_TYPES.register("element_ring", () ->
             EntityType.Builder.<ElementRingEntity>of(ElementRingEntity::new, MobCategory.MISC)
                 .sized(0.2f, 0.2f)
                 .clientTrackingRange(64)
-                .updateInterval(4)
+                .updateInterval(1)
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "element_ring").toString())
         );
 

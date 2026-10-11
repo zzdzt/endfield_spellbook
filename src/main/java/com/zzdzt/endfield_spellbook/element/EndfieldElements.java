@@ -50,6 +50,9 @@ public final class EndfieldElements {
      */
     private static boolean IN_APPLY;
 
+    /** 附着目标指向其当前弧环实体的 UUID，避免每次刷新都在空间范围内搜索实体。 */
+    static final String RING_ENTITY_UUID = "endfield_spellbook:element_ring_uuid";
+
     // ==================== 数值占位（全部待定，进游戏后统一调） ====================
 
     /** 附着层数上限（原作 4 层封顶）。 */
@@ -135,6 +138,27 @@ public final class EndfieldElements {
         if (!(target.level() instanceof ServerLevel level)) return -1;
         long now = level.getGameTime();
         return ElementInflictionStore.isValid(target, now) ? ElementInflictionStore.getStacks(target) : -1;
+    }
+
+    /**
+     * 消耗指定元素的单层附着，返回消耗前层数；其他元素或无效附着不变。
+     * 保留剩余层数的过期时间，并刷新弧环，供单层强化爆发类技能使用。
+     */
+    public static int consumeOne(LivingEntity target, EndfieldElement element) {
+        if (!(target.level() instanceof ServerLevel level)) return 0;
+        long now = level.getGameTime();
+        if (!ElementInflictionStore.isValid(target, now)
+            || ElementInflictionStore.getElement(target) != element) return 0;
+
+        int before = ElementInflictionStore.getStacks(target);
+        if (before <= 1) {
+            ElementInflictionStore.clear(target);
+        } else {
+            ElementInflictionStore.set(target, element, before - 1,
+                ElementInflictionStore.getExpireAtGameTime(target));
+        }
+        refreshRing(target, now);
+        return before;
     }
 
     /**
@@ -240,26 +264,53 @@ public final class EndfieldElements {
     // ==================== 弧环视觉同步 ====================
 
     /**
-     * 刷新目标脚下的附着弧环：查找同目标旧环丢弃后按当前状态重建
-     * （有效附着 → 环寿命 = 附着剩余时间；无附着 → 仅丢弃 = 消散）。
+     * 更新目标脚下的附着弧环。
+     *
+     * <p>每个目标通过 persistentData 记录当前弧环 UUID：有效附着只更新现有实体的同步字段和
+     * 过期年龄，不再销毁/重建，也不再执行附近实体搜索；附着消失时才销毁弧环。
      */
-    private static void refreshRing(LivingEntity target, long now) {
+    static void refreshRing(LivingEntity target, long now) {
         if (!(target.level() instanceof ServerLevel level)) return;
-        // 丢弃旧环
-        for (ElementRingEntity old : level.getEntitiesOfClass(ElementRingEntity.class,
-            target.getBoundingBox().inflate(4),
-            ring -> target.getUUID().equals(ring.getTargetId()) && !ring.isRemoved())) {
-            old.discard();
+
+        var data = target.getPersistentData();
+        ElementRingEntity ring = null;
+        if (data.hasUUID(RING_ENTITY_UUID)) {
+            var linked = level.getEntity(data.getUUID(RING_ENTITY_UUID));
+            if (linked instanceof ElementRingEntity candidate
+                && !candidate.isRemoved()
+                && target.getUUID().equals(candidate.getTargetId())) {
+                ring = candidate;
+            } else {
+                // 旧环可能已因目标卸载、维度切换或生命周期结束而不存在。
+                data.remove(RING_ENTITY_UUID);
+            }
         }
-        if (!ElementInflictionStore.isValid(target, now)) return;
+
+        if (!ElementInflictionStore.isValid(target, now)) {
+            if (ring != null) {
+                ring.discard();
+            }
+            data.remove(RING_ENTITY_UUID);
+            return;
+        }
 
         var element = ElementInflictionStore.getElement(target);
         int stacks = ElementInflictionStore.getStacks(target);
         float radius = Math.max(0.85f, target.getBbWidth() * 0.8f);
-        // 刚刷新过附着 → 环寿命 = 附着时长 + 10 tick 淡出缓冲
-        int lifetime = (int) Math.min(Integer.MAX_VALUE, INFLICTION_DURATION_TICKS + 10);
-        var ring = new ElementRingEntity(EntityRegistry.ELEMENT_RING.get(), level,
+        // 使用附着实际剩余时间，而非每次消耗都重置满时长；额外 10 tick 用于平滑淡出。
+        long remainingTicks = Math.max(1L,
+            ElementInflictionStore.getExpireAtGameTime(target) - now);
+        int lifetime = (int) Math.min(Integer.MAX_VALUE, remainingTicks + 10L);
+
+        if (ring != null) {
+            ring.refreshVisualState(element, stacks, radius, lifetime);
+            return;
+        }
+
+        ElementRingEntity created = new ElementRingEntity(EntityRegistry.ELEMENT_RING.get(), level,
             target.position(), target.getUUID(), element, stacks, radius, lifetime);
-        level.addFreshEntity(ring);
+        if (level.addFreshEntity(created)) {
+            data.putUUID(RING_ENTITY_UUID, created.getUUID());
+        }
     }
 }
