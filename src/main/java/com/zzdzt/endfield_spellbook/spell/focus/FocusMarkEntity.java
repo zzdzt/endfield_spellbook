@@ -156,12 +156,24 @@ public class FocusMarkEntity extends Entity implements SpellVisualOnly, Inflicti
 
     /** 消散并摘除聚焦 debuff（覆盖移除 / 自然到期统一入口）。 */
     public void destroy() {
-        unregisterListener();
+        // Explicit destruction also removes the target's HUD debuff. The remove() override below
+        // independently guarantees Hub cleanup for removal paths that do not call destroy().
         Entity target = level().getEntity(targetId);
         if (target instanceof LivingEntity living) {
             living.removeEffect(EffectRegistry.FOCUSED.get());
         }
         discard();
+    }
+
+    /**
+     * InflictionHub strongly references listeners by target UUID. Entities can be discarded or
+     * removed through paths other than destroy(), so release the registration at the common
+     * Entity removal boundary as well. unregisterListener() is idempotent.
+     */
+    @Override
+    public void remove(RemovalReason reason) {
+        unregisterListener();
+        super.remove(reason);
     }
 
     private void unregisterListener() {
