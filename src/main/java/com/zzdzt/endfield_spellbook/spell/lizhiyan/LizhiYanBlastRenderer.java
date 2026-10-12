@@ -497,15 +497,15 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
             // 外晕：宽而透明，负责让银白轨迹从场景中分离。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start, span,
-                0.205f, 0.24f, 0.40f, 0.62f, fade * 0.17f, 48);
+                0.205f, 0.32f, 0.67f, 1.0f, fade * 0.22f, 48);
             // 贴图主层：银蓝丝带随弧段铺展，UV 随时间滚动。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start, span,
-                0.105f, 0.86f, 0.92f, 0.98f, fade * 0.78f, 48);
+                0.105f, 0.70f, 0.88f, 1.0f, fade * 0.68f, 48);
             // 锐利白芯略微缩短，避免整条弧看起来像粗实心线圈。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start + 0.08f, span * 0.96f,
-                0.026f, 1.0f, 1.0f, 1.0f, fade * 0.98f, 48);
+                0.026f, 0.96f, 0.99f, 1.0f, fade * 0.92f, 48);
         }
     }
 
