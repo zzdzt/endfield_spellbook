@@ -476,8 +476,8 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
 
         // 视频参考是少量大幅卷风环：开口弧的空间尺寸远大于主束，并随年龄产生扭转。
         float[] positions = {0.13f, 0.39f, 0.66f, 0.88f};
-        float[] radiusX = {1.20f, 1.62f, 1.34f, 1.72f};
-        float[] radiusZ = {1.32f, 1.74f, 1.46f, 1.66f};
+        float[] radiusX = {0.90f, 1.22f, 1.01f, 1.29f};
+        float[] radiusZ = {0.99f, 1.31f, 1.10f, 1.25f};
         float[] starts = {0.18f, 1.43f, 2.79f, 4.07f};
         float[] spans = {4.78f, 4.55f, 4.94f, 4.62f};
         float[] axialTilt = {0.48f, -0.60f, 0.68f, -0.55f};
@@ -494,18 +494,18 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
             float swayZ = 1.0f + 0.08f * Mth.cos(age * 0.37f + i * 1.2f);
             float fade = alpha * (0.72f + 0.28f * Mth.sin(age * 0.58f + i * 1.6f));
 
-            // 外晕：宽而透明，负责让银白轨迹从场景中分离。
+            // 外晕：宽而透明，从蓝晕改为保留轻冷调的银晕。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start, span,
-                0.205f, 0.32f, 0.67f, 1.0f, fade * 0.22f, 48);
-            // 贴图主层：银蓝丝带随弧段铺展，UV 随时间滚动。
+                0.205f, 0.88f, 0.92f, 1.0f, fade * 0.22f, 48);
+            // 贴图主层：贴图实测偏蓝(B/R≈1.4)，顶点色压 G/B 补偿为银白，alpha 微升补亮度。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start, span,
-                0.105f, 0.70f, 0.88f, 1.0f, fade * 0.68f, 48);
-            // 锐利白芯略微缩短，避免整条弧看起来像粗实心线圈。
+                0.105f, 1.0f, 0.88f, 0.82f, fade * 0.74f, 48);
+            // 锐利白芯略微缩短；顶点色接近纯白，让贴图最亮核心直接爆成银白。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start + 0.08f, span * 0.96f,
-                0.026f, 0.96f, 0.99f, 1.0f, fade * 0.92f, 48);
+                0.026f, 1.0f, 1.0f, 0.94f, fade * 0.92f, 48);
         }
     }
 
