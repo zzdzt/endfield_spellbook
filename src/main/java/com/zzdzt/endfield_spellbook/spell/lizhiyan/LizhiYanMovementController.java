@@ -33,8 +33,9 @@ final class LizhiYanMovementController {
         Vec3 motion = entity.getDeltaMovement().scale(1.0 - steering).add(desired.scale(steering));
         if (motion.length() > maxSpeed) motion = motion.normalize().scale(maxSpeed);
         entity.setDeltaMovement(motion);
-        entity.setPos(entity.position().add(motion));
-        entity.hasImpulse = true;
+        Vec3 next = entity.position().add(motion);
+        entity.setPos(next.x, next.y, next.z);
+        entity.markMovementImpulse();
         Vec3 face = facing != null ? facing : motion;
         if (face.lengthSqr() > 1e-5) faceDirection(face, turnRate);
     }
