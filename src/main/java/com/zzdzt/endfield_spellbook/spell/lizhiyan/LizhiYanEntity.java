@@ -16,7 +16,6 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.DamageTypeTags;
@@ -73,13 +72,6 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     private static final float FORMATION_LERP = 0.12f;
     private static final float IDLE_SWAY_AMP = 0.03f;
     private static final float IDLE_SWAY_FREQ = 0.02f;
-    // 视线检测降频：每 2 tick 一次
-    private static final int LOS_CHECK_INTERVAL = 2;
-    // 丢失视线超时：13 * 2tick = 26tick ≈ 1.3秒
-    private static final int LOST_SIGHT_TIMEOUT = 13;
-    // 目标扫描间隔：无目标时更频繁
-    private static final int SCAN_INTERVAL_NO_TARGET = 10;
-    private static final int SCAN_INTERVAL_HAS_TARGET = 20;
     // 方向变化阈值：小于此值时跳过三角函数
     private static final double AIM_DIR_THRESHOLD_SQ = 0.001;
     // 位置更新降频：每 2 tick 计算一次
@@ -114,10 +106,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     private float baseDamage;
     private float range = 20.0f;
 
-    // 目标追踪
-    @Nullable private Entity currentTarget;
-    @Nullable private Entity pendingTarget;
-    private int lostSightTick;
+    // 目标获取与丢失视线判定独立维护，实体类负责消费目标并驱动攻击状态机。
+    private final LizhiYanTargeting targeting = new LizhiYanTargeting(this);
 
     private Phase phase = Phase.IDLE;
     private int phaseTick = 0;
@@ -304,7 +294,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         else if (phase == Phase.BLAST || phase == Phase.BLAST_DELAY) { holdBlastPosition(owner); }
         else { updateFormationPosition(owner); }
 
-        updateTarget(owner);
+        targeting.update(owner, range);
         updateAttackState(owner);
         syncStateToClient();
     }
@@ -353,7 +343,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     //瞄准方向
     private void updateAimDirection(LivingEntity owner) {
-        Entity targetToAim = currentTarget != null ? currentTarget : pendingTarget;
+        Entity targetToAim = targeting.getCurrentTarget() != null ? targeting.getCurrentTarget() : targeting.getPendingTarget();
 
         Vec3 aimDir;
         if (targetToAim != null && targetToAim.isAlive()) {
@@ -394,111 +384,18 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         return from + diff * t;
     }
 
-    // 目标追踪
-    private void updateTarget(LivingEntity owner) {
-        // 1. 获取玩家当前攻击目标
-        Entity newPlayerTarget = getPlayerCurrentTarget(owner);
-
-        // 2. 如果玩家有目标，优先使用
-        if (newPlayerTarget != null && newPlayerTarget.isAlive()) {
-            UUID currentUUID = currentTarget != null ? currentTarget.getUUID() : null;
-            UUID bestUUID = newPlayerTarget.getUUID();
-
-            if (!bestUUID.equals(currentUUID)) {
-                boolean inRange = distanceTo(newPlayerTarget) <= range;
-                boolean hasLos = hasLineOfSight(newPlayerTarget);
-
-                if (inRange && hasLos) {
-                    pendingTarget = newPlayerTarget;
-                }
-            }
-        }
-
-        // 3. 检查当前目标是否有效
-        if (pendingTarget == null && currentTarget != null) {
-            if (!currentTarget.isAlive() || currentTarget.isRemoved()) {
-                currentTarget = null;
-                lostSightTick = 0;
-            } else if (distanceTo(currentTarget) > range * 1.5) {
-                currentTarget = null;
-                lostSightTick = 0;
-            } else if (tickCount % LOS_CHECK_INTERVAL == 0 && !hasLineOfSight(currentTarget)) {
-                lostSightTick++;
-                if (lostSightTick >= LOST_SIGHT_TIMEOUT) {
-                    currentTarget = null;
-                    lostSightTick = 0;
-                }
-            } else if (tickCount % LOS_CHECK_INTERVAL == 0) {
-                // 有视线时重置计时
-                lostSightTick = 0;
-            }
-        }
-
-        // 4. 自动扫描
-        if (currentTarget == null && pendingTarget == null) {
-            int scanInterval = (currentTarget == null && pendingTarget == null)
-                ? SCAN_INTERVAL_NO_TARGET
-                : SCAN_INTERVAL_HAS_TARGET;
-            if (tickCount % scanInterval == 0) {
-                currentTarget = findNearestEnemy(owner);
-            }
-        }
-    }
-
-    /**
-     * 获取玩家当前攻击目标
-     */
-    @Nullable
-    private Entity getPlayerCurrentTarget(LivingEntity owner) {
-        if (!(owner instanceof ServerPlayer serverPlayer)) return null;
-
-        // 原版 lastHurtMob（100tick内）
-        LivingEntity lastHurt = serverPlayer.getLastHurtMob();
-        if (lastHurt != null && lastHurt.isAlive()) {
-            int lastHurtTimestamp = serverPlayer.getLastHurtMobTimestamp();
-            if (serverPlayer.tickCount - lastHurtTimestamp < 100) {
-                return lastHurt;
-            }
-        }
-
-        return null;
-    }
-
-    @Nullable
-    private Entity findNearestEnemy(LivingEntity owner) {
-        AABB aabb = new AABB(getX()-range, getY()-range, getZ()-range,
-                             getX()+range, getY()+range, getZ()+range);
-        var candidates = level().getEntities(owner, aabb, e -> {
-            if (e == this || e == owner) return false;
-            if (!(e instanceof LivingEntity living)) return false;
-            if (e instanceof net.minecraft.world.entity.player.Player) return false;
-            return living.isAlive() && living.canBeSeenAsEnemy();
-        });
-        return candidates.stream()
-            .filter(e -> hasLineOfSight(e))
-            .min((a, b) -> Double.compare(distanceTo(a), distanceTo(b)))
-            .orElse(null);
-    }
-
-    private boolean hasLineOfSight(Entity target) {
-        Vec3 start = position().add(0, 0.3, 0);
-        Vec3 end = target.position().add(0, target.getBbHeight()/2, 0);
-        return level().clip(new ClipContext(start, end,
-            ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this)).getType() == HitResult.Type.MISS;
-    }
-
     // 攻击状态机
     private void updateAttackState(LivingEntity owner) {
         switch (phase) {
             case IDLE:
-                if (pendingTarget != null && pendingTarget.isAlive()) {
-                    currentTarget = pendingTarget;
-                    pendingTarget = null;
+                if (targeting.getPendingTarget() != null && targeting.getPendingTarget().isAlive()) {
+                    targeting.setCurrentTarget(targeting.getPendingTarget());
+                    targeting.setPendingTarget(null);
                     attackIndex = 0;
-                    lostSightTick = 0;
+                    targeting.resetLostSightTick();
                 }
 
-                if (currentTarget != null && currentTarget.isAlive()) {
+                if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
                     phase = Phase.CHARGE;
                     phaseTick = 0;
                     blastLockedDirection = null;
@@ -510,10 +407,10 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
                 phaseTick++;
                 int chargeThreshold = CHARGE_TICKS_STAB;
 
-                if (currentTarget != null) updateAimDirection(owner);
+                if (targeting.getCurrentTarget() != null) updateAimDirection(owner);
 
-                if (attackIndex >= 2 && currentTarget != null) {
-                    Vec3 tc = currentTarget.position().add(0, currentTarget.getBbHeight()/2, 0);
+                if (attackIndex >= 2 && targeting.getCurrentTarget() != null) {
+                    Vec3 tc = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
                     blastLockedDirection = tc.subtract(position()).normalize();
                 }
 
@@ -577,15 +474,15 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
                 int cooldown = (attackIndex == 0) ? COOLDOWN_TICKS_BLAST : COOLDOWN_TICKS_STAB;
 
                 if (phaseTick >= cooldown) {
-                    if (pendingTarget != null && pendingTarget.isAlive()) {
-                        currentTarget = pendingTarget;
-                        pendingTarget = null;
+                    if (targeting.getPendingTarget() != null && targeting.getPendingTarget().isAlive()) {
+                        targeting.setCurrentTarget(targeting.getPendingTarget());
+                        targeting.setPendingTarget(null);
                         attackIndex = 0;
                         phase = Phase.CHARGE;
                         phaseTick = 0;
                         blastLockedDirection = null;
                         hasDealtDamage = false;
-                    } else if (currentTarget != null && currentTarget.isAlive()) {
+                    } else if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
                         phase = Phase.CHARGE;
                         phaseTick = 0;
                         blastLockedDirection = null;
@@ -604,10 +501,10 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     // 戳刺（阻尼追踪相位机：后顿 → 冲刺 → 惯性滑行，物理时长，参照 YujianCraft flyToward）
     private void startStab() {
-        if (currentTarget == null) { phase = Phase.IDLE; phaseTick = 0; return; }
+        if (targeting.getCurrentTarget() == null) { phase = Phase.IDLE; phaseTick = 0; return; }
         phase = Phase.STAB; phaseTick = 0; thrustTick = 1; hasDealtDamage = false;
         formationPos = position();
-        Vec3 targetCenter = currentTarget.position().add(0, currentTarget.getBbHeight()/2, 0);
+        Vec3 targetCenter = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
         Vec3 toTarget = targetCenter.subtract(formationPos);
         thrustDirection = toTarget.normalize();
         thrustTarget = targetCenter;
@@ -633,7 +530,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
             }
             case DASH -> {
                 // 冲刺：目标点实时追踪，全速穿越；剑尖始终朝目标；命中用扫掠判定
-                LivingEntity target = currentTarget instanceof LivingEntity living ? living : null;
+                LivingEntity target = targeting.getCurrentTarget() instanceof LivingEntity living ? living : null;
                 Vec3 aimPoint = (target != null && target.isAlive())
                         ? target.position().add(0, target.getBbHeight() * 0.55, 0)
                         : thrustTarget;
@@ -855,8 +752,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     /** 剑尖朝向：目标存活时朝目标（0.55 身高），否则朝玩家前方。 */
     private Vec3 aimFacing(LivingEntity owner) {
-        if (currentTarget != null && currentTarget.isAlive()) {
-            return currentTarget.position().add(0, currentTarget.getBbHeight() / 2, 0)
+        if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
+            return targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight() / 2, 0)
                     .subtract(position()).normalize();
         }
         float yawRad = owner.getYRot() * 0.0174533f;
@@ -896,8 +793,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         // 发射方向：目标存活时按当前站位（身后偏左）实时对准 ——
         // 不用 CHARGE 阶段在编队位算的 blastLockedDirection（剑已飞到站位，旧方向会射偏导致打不中）
         Vec3 lookDir;
-        if (currentTarget != null && currentTarget.isAlive()) {
-            Vec3 tc = currentTarget.position().add(0, currentTarget.getBbHeight()/2, 0);
+        if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
+            Vec3 tc = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
             lookDir = tc.subtract(position()).normalize();
         } else {
             lookDir = getTargetDirection();
@@ -946,7 +843,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
             if (e == this || e == owner) return false;
             if (!(e instanceof LivingEntity living)) return false;
             if (e instanceof net.minecraft.world.entity.player.Player player
-                && (currentTarget == null || !player.getUUID().equals(currentTarget.getUUID()))) {
+                && (targeting.getCurrentTarget() == null || !player.getUUID().equals(targeting.getCurrentTarget().getUUID()))) {
                 return false;
             }
             return living.isAlive() && living.canBeSeenAsEnemy();
@@ -967,8 +864,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     private Vec3 getTargetDirection() {
         if (blastLockedDirection != null) return blastLockedDirection;
-        if (currentTarget != null) {
-            Vec3 tc = currentTarget.position().add(0, currentTarget.getBbHeight()/2, 0);
+        if (targeting.getCurrentTarget() != null) {
+            Vec3 tc = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
             return tc.subtract(position()).normalize();
         }
         return Vec3.directionFromRotation(getXRot(), getYRot());
