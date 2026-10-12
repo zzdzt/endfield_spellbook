@@ -41,7 +41,7 @@ public final class ElementRingLifecycle {
         }
 
         // 没有附着数据也没有旧回链的普通实体无需排队。
-        boolean hasRingReference = target.getPersistentData().hasUUID(EndfieldElements.RING_ENTITY_UUID);
+        boolean hasRingReference = target.getPersistentData().hasUUID(ElementRingController.RING_ENTITY_UUID);
         boolean hasValidInfliction = ElementInflictionStore.isValid(target, level.getGameTime());
         if (hasRingReference || hasValidInfliction) {
             PENDING.computeIfAbsent(level, ignored -> new ArrayDeque<>()).add(target.getUUID());
@@ -65,7 +65,7 @@ public final class ElementRingLifecycle {
             if (entity instanceof LivingEntity target
                 && target.isAlive()
                 && !target.isRemoved()) {
-                EndfieldElements.refreshRing(target, level.getGameTime());
+                ElementRingController.refreshRing(target, level.getGameTime());
             }
         }
     }

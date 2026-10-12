@@ -106,9 +106,9 @@ public class ElementRingEntity extends Entity implements IEntityAdditionalSpawnD
         }
 
         var data = living.getPersistentData();
-        if (data.hasUUID(EndfieldElements.RING_ENTITY_UUID)
-            && getUUID().equals(data.getUUID(EndfieldElements.RING_ENTITY_UUID))) {
-            data.remove(EndfieldElements.RING_ENTITY_UUID);
+        if (data.hasUUID(ElementRingController.RING_ENTITY_UUID)
+            && getUUID().equals(data.getUUID(ElementRingController.RING_ENTITY_UUID))) {
+            data.remove(ElementRingController.RING_ENTITY_UUID);
         }
     }
 

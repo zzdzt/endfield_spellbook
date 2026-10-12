@@ -14,8 +14,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>附着生产者全模组唯一（{@code EndfieldElements.apply}），在此挂钩即覆盖全部施加路径。
  * 监听器按目标 UUID 登记（如聚焦标记实体）；通知遍历监听器副本——回调内注销自身安全。
  *
- * <p>仅服务端主线程使用；重入防护由 {@code EndfieldElements.IN_APPLY} 承担
- * （补层 apply 不会再次广播），本类不做防递归。
+ * <p>仅服务端主线程使用；是否广播由每次附着调用显式决定。
+ * {@code EndfieldElements.applyNoNotify} 不会进入本通知中心，不依赖全局重入标志。
  */
 public final class InflictionHub {
 
@@ -44,7 +44,7 @@ public final class InflictionHub {
         }
     }
 
-    /** apply 末尾广播（仅服务端；IN_APPLY 重入期间不调用）。 */
+    /** apply 末尾广播（仅服务端；notify policy 禁止时不调用）。 */
     public static void notifyApplied(LivingEntity attacker, LivingEntity target, EndfieldElement element) {
         List<Listener> listeners = BY_TARGET.get(target.getUUID());
         if (listeners == null || listeners.isEmpty()) {
