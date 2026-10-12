@@ -54,7 +54,7 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
             "wind_arrow_beam", TEXTURE_WIND_ARROW_BEAM, false);
 
     private static final ResourceLocation TEXTURE_WIND_ARROW_RING =
-        ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_ring.png");
+        ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_swirl_trail.png");
     private static final RenderType WIND_ARROW_RING =
         EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
             "wind_arrow_ring", TEXTURE_WIND_ARROW_RING, false);
@@ -465,8 +465,8 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
     }
 
     /**
-     * 银白翻卷弧带。每条弧只覆盖一段角度，环半径/倾斜/起始角各不相同。
-     * 先画一层低亮电蓝外缘，再画窄银白内带，避免完整几何圆圈的“线圈感”。
+     * 银白翻卷弧带。专用 swirl 贴图沿每段开口弧的 UV 方向铺展，
+     * 由 UV 流动、几何扭转与多层亮度共同产生动态反射，而不是仅靠纯色几何线。
      */
     private static void renderWindArrowRibbonArcs(PoseStack poseStack, VertexConsumer consumer,
                                                   float length, float age, float alpha) {
@@ -494,16 +494,18 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
             float swayZ = 1.0f + 0.08f * Mth.cos(age * 0.37f + i * 1.2f);
             float fade = alpha * (0.72f + 0.28f * Mth.sin(age * 0.58f + i * 1.6f));
 
-            // 材质提供丝状高光和破碎反射；三层宽度模拟外部泛光、中层银蓝、白色锐边。
+            // 外晕：宽而透明，负责让银白轨迹从场景中分离。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start, span,
-                0.185f, 0.10f, 0.30f, 1.0f, fade * 0.27f, 40);
+                0.205f, 0.32f, 0.67f, 1.0f, fade * 0.22f, 48);
+            // 贴图主层：银蓝丝带随弧段铺展，UV 随时间滚动。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start, span,
-                0.088f, 0.56f, 0.77f, 1.0f, fade * 0.63f, 40);
+                0.105f, 0.70f, 0.88f, 1.0f, fade * 0.68f, 48);
+            // 锐利白芯略微缩短，避免整条弧看起来像粗实心线圈。
             drawWindArrowRibbonArc(poseStack, consumer, cx, centerY, cz,
                 radiusX[i] * swayX, radiusZ[i] * swayZ, axialTilt[i], phase, start + 0.08f, span * 0.96f,
-                0.030f, 0.95f, 0.99f, 1.0f, fade * 0.94f, 40);
+                0.026f, 0.96f, 0.99f, 1.0f, fade * 0.92f, 48);
         }
     }
 
@@ -543,13 +545,17 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
             float alpha0 = alpha * Math.max(0.0f, endFade0) * wave0;
             float alpha1 = alpha * Math.max(0.0f, endFade1) * wave1;
 
-            emitVertex(pose, consumer, x0, y0 + half0, z0, s0, 0,
+            // 贴图 U 沿弧段滚动，V 横跨丝带；以重复采样避免整张纹理被拉伸成单个亮斑。
+            float uvScroll = phase * 0.075f;
+            float u0 = s0 * 3.0f + uvScroll;
+            float u1 = s1 * 3.0f + uvScroll;
+            emitVertex(pose, consumer, x0, y0 + half0, z0, u0, 0,
                 red, green, blue, alpha0, 0, 0, 1);
-            emitVertex(pose, consumer, x0, y0 - half0, z0, s0, 1,
+            emitVertex(pose, consumer, x0, y0 - half0, z0, u0, 1,
                 red, green, blue, alpha0, 0, 0, 1);
-            emitVertex(pose, consumer, x1, y1 - half1, z1, s1, 1,
+            emitVertex(pose, consumer, x1, y1 - half1, z1, u1, 1,
                 red, green, blue, alpha1, 0, 0, 1);
-            emitVertex(pose, consumer, x1, y1 + half1, z1, s1, 0,
+            emitVertex(pose, consumer, x1, y1 + half1, z1, u1, 0,
                 red, green, blue, alpha1, 0, 0, 1);
         }
     }
