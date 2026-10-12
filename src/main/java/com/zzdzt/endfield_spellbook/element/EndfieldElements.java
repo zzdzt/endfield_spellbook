@@ -84,7 +84,7 @@ public final class EndfieldElements {
             ElementReactionService.triggerReaction(level, attacker, target, element, stage, spellPower);
         }
 
-        ElementRingController.ElementRingController.refreshRing(target, now);
+        ElementRingController.refreshRing(target, now);
         if (notifyListeners) {
             InflictionHub.notifyApplied(attacker, target, element);
         }
