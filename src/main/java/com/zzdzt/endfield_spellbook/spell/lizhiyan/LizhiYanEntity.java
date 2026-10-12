@@ -108,6 +108,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     // 目标获取与丢失视线判定独立维护，实体类负责消费目标并驱动攻击状态机。
     private final LizhiYanTargeting targeting = new LizhiYanTargeting(this);
+    private final LizhiYanMovementController movement = new LizhiYanMovementController(this);
 
     private Phase phase = Phase.IDLE;
     private int phaseTick = 0;
@@ -221,6 +222,14 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         tag.putFloat("BaseDamage", baseDamage);
         tag.putFloat("Range", range);
         tag.putInt("AttackIndex", attackIndex);
+    }
+
+    /** Movement-controller bridge: rotation remains owned by the entity. */
+    void applyMovementRotation(float yaw, float pitch) {
+        currentYaw = yaw;
+        currentPitch = pitch;
+        setYRot(yaw);
+        setXRot(pitch);
     }
 
     //公共 Getter
@@ -600,59 +609,26 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         }
     }
 
-    // ===== 阻尼追踪运动（参照 YujianCraft FlyingSwordEntity）=====
-
-    /**
-     * 阻尼追踪：期望速度 = min(maxSpeed, 剩余距离)（arrive 减速），
-     * 当前动量向期望速度 lerp（steering 越小转向越柔），接近目标自动减速刹车。
-     * 相比"关键帧 setPos"，速度曲线物理连续 —— 穿刺灵动的核心。
-     */
+    // 阻尼运动与朝向计算委托给专用控制器；攻击相位仍由实体持有。
     private void flyToward(Vec3 destination, double steering, double maxSpeed) {
-        flyToward(destination, steering, maxSpeed, null, 0.28);
+        movement.flyToward(destination, steering, maxSpeed);
     }
 
-    /**
-     * @param facing 剑尖朝向（null = 默认朝运动方向 motion）。
-     *               蓄力后拉等"位置后退但剑尖仍要朝目标"的场景必须显式传 facing，
-     *               否则剑尖会朝后退方向（表现为枪尾朝前）。
-     */
     private void flyToward(Vec3 destination, double steering, double maxSpeed, @Nullable Vec3 facing) {
-        flyToward(destination, steering, maxSpeed, facing, 0.28);
+        movement.flyToward(destination, steering, maxSpeed, facing);
     }
 
-    /**
-     * @param turnRate 渐进转向速率（0~1）。WINDUP 等"必须立即对准"的场景传 1.0，
-     *                 避免 turnRate 0.28 + 短持续时间导致转向跟不上、剑仍朝上次朝向。
-     */
     private void flyToward(Vec3 destination, double steering, double maxSpeed,
                            @Nullable Vec3 facing, double turnRate) {
-        Vec3 offset = destination.subtract(position());
-        Vec3 desired = offset.lengthSqr() < 1e-6 ? Vec3.ZERO
-                : offset.normalize().scale(Math.min(maxSpeed, Math.max(0.08, offset.length())));
-        Vec3 motion = getDeltaMovement().scale(1.0 - steering).add(desired.scale(steering));
-        if (motion.length() > maxSpeed) motion = motion.normalize().scale(maxSpeed);
-        setDeltaMovement(motion);
-        setPos(position().add(motion));
-        hasImpulse = true;
-        Vec3 face = facing != null ? facing : motion;
-        if (face.lengthSqr() > 1e-5) faceDirection(face, turnRate);
+        movement.flyToward(destination, steering, maxSpeed, facing, turnRate);
     }
 
-    /** 朝向向量渐进转向（turnRate 0~1，越小越慢），避免转向突变。 */
     private void faceDirection(Vec3 requested, double turnRate) {
-        Vec3 current = Vec3.directionFromRotation(getXRot(), getYRot());
-        Vec3 target = requested.lengthSqr() < 1e-6 ? current : requested.normalize();
-        Vec3 blended = current.scale(1.0 - turnRate).add(target.scale(turnRate));
-        if (blended.lengthSqr() < 1e-6) blended = target;
-        blended = blended.normalize();
-        currentYaw = (float) Math.toDegrees(Math.atan2(-blended.x, blended.z));
-        currentPitch = (float) -Math.toDegrees(Math.atan2(blended.y, blended.horizontalDistance()));
-        setYRot(currentYaw);
-        setXRot(currentPitch);
+        movement.faceDirection(requested, turnRate);
     }
 
     private boolean closeTo(Vec3 point, double radius) {
-        return point.distanceToSqr(position()) < radius * radius;
+        return movement.closeTo(point, radius);
     }
 
     private void updateSpin(LivingEntity owner) {
