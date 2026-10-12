@@ -224,6 +224,9 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         tag.putInt("AttackIndex", attackIndex);
     }
 
+    /** Movement-controller bridge for Entity's protected impulse flag. */
+    void markMovementImpulse() { hasImpulse = true; }
+
     /** Movement-controller bridge: rotation remains owned by the entity. */
     void applyMovementRotation(float yaw, float pitch) {
         currentYaw = yaw;
