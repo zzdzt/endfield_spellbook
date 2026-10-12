@@ -545,10 +545,10 @@ public class LizhiYanBlastRenderer extends EntityRenderer<LizhiYanBlastVisualEnt
             float alpha0 = alpha * Math.max(0.0f, endFade0) * wave0;
             float alpha1 = alpha * Math.max(0.0f, endFade1) * wave1;
 
-            // 贴图 U 沿弧段滚动，V 横跨丝带；以重复采样避免整张纹理被拉伸成单个亮斑。
-            float uvScroll = phase * 0.075f;
-            float u0 = s0 * 3.0f + uvScroll;
-            float u1 = s1 * 3.0f + uvScroll;
+            // 贴图 U 沿弧段完整铺展，V 横跨丝带。独立纹理默认不保证 repeat wrap，
+            // 因此 UV 保持在 0..1；流动感由弧线相位和几何扭转提供。
+            float u0 = s0;
+            float u1 = s1;
             emitVertex(pose, consumer, x0, y0 + half0, z0, u0, 0,
                 red, green, blue, alpha0, 0, 0, 1);
             emitVertex(pose, consumer, x0, y0 - half0, z0, u0, 1,
