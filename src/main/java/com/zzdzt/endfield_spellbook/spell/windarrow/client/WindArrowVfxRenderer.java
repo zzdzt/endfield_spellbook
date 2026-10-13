@@ -64,6 +64,12 @@ public final class WindArrowVfxRenderer {
         EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
             "wind_arrow_sprites", TEXTURE_WIND_ARROW_SPRITES, false);
 
+    private static final ResourceLocation TEXTURE_WIND_ARROW_SHARDS =
+        ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_shards.png");
+    private static final RenderType WIND_ARROW_SHARDS =
+        EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
+            "wind_arrow_shards", TEXTURE_WIND_ARROW_SHARDS, false);
+
     private WindArrowVfxRenderer() {
     }
 
@@ -139,7 +145,8 @@ public final class WindArrowVfxRenderer {
         renderWindArrowRibbonArcs(poseStack, ring, visibleLength, age, arcAlpha);
 
         VertexConsumer sprites = bufferSource.getBuffer(WIND_ARROW_SPRITES);
-        renderWindArrowSprites(poseStack, sprites, visibleLength, age, arcAlpha, trailAlpha);
+        VertexConsumer shards = bufferSource.getBuffer(WIND_ARROW_SHARDS);
+        renderWindArrowSprites(poseStack, sprites, shards, visibleLength, age, arcAlpha, trailAlpha);
         renderWindArrowAfterglow(poseStack, glow, sprites, visibleLength, age, trailAlpha);
 
         // 箭矢前锋：真正具有方向性的尖锐箭头 + 中心星芒。
@@ -307,6 +314,7 @@ public final class WindArrowVfxRenderer {
     }
 
     private static void renderWindArrowSprites(PoseStack poseStack, VertexConsumer consumer,
+                                               VertexConsumer shardConsumer,
                                                float length, float age,
                                                float arcAlpha, float trailAlpha) {
         if (length <= 0.05f) {
@@ -356,9 +364,11 @@ public final class WindArrowVfxRenderer {
             poseStack.pushPose();
             poseStack.translate(x, y, z);
             poseStack.mulPose(Axis.YP.rotationDegrees(phase * 40.0f + i * 65.0f));
-            drawWindArrowSpriteAtOrigin(poseStack, consumer,
-                0.105f, 0.155f, 3, 0.58f, 0.80f, 1.0f,
-                fade * 0.44f);
+            // 独立晶体图集：四格分别提供细长切面、弧形碎片、紧凑晶片与双碎片组合。
+            // 近银白 tint 保留贴图高光层次，强蓝色由独立外晕承担。
+            drawWindArrowSpriteAtOrigin(poseStack, shardConsumer,
+                0.105f, 0.155f, i % 4, 0.86f, 0.96f, 1.0f,
+                fade * 0.54f);
             poseStack.popPose();
         }
     }
