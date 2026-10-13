@@ -482,6 +482,11 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         movement.faceDirection(requested, turnRate);
     }
 
+    /** Package bridge for the blast executor to align the sword immediately before firing. */
+    void faceDirectionForBlast(Vec3 requested) {
+        faceDirection(requested, 1.0);
+    }
+
     boolean closeTo(Vec3 point, double radius) {
         return movement.closeTo(point, radius);
     }
@@ -644,26 +649,11 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         // ⚠️ 此处不能清空齐射站位锁：BLAST/BLAST_DELAY 阶段还要靠它悬停在齐射站位。
         // 站位锁定在 SPIN 结束（attackIndex 归零）时释放，下一轮重新锁定。
 
-        // 发射方向：目标存活时按当前站位（身后偏左）实时对准 ——
-        // 不用 CHARGE 阶段在编队位算的 blastLockedDirection（剑已飞到站位，旧方向会射偏导致打不中）
-        Vec3 lookDir;
-        if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
-            Vec3 tc = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
-            lookDir = tc.subtract(position()).normalize();
-        } else {
-            lookDir = getTargetDirection();
-            if (lookDir.lengthSqr() < 0.0001) {
-                lookDir = Vec3.directionFromRotation(getXRot(), getYRot());
-            }
-        }
-
-        Vec3 startPos = position().add(0, 0.3, 0);
-        // 发射光束前，剑尖对准发射方向（startBlast 此前不设置朝向，剑可能指向别处）
-        if (lookDir.lengthSqr() > 1e-6) faceDirection(lookDir, 1.0);
-
+        // Executor resolves the live target direction from the sword's current firing position.
         LizhiYanBlastExecutor.fire(
-            this, owner, startPos, lookDir, range, BLAST_TINTS[slotIndex],
-            baseDamage * BLAST_DAMAGE_MULTIPLIER, targeting.getCurrentTarget()
+            this, owner, range, BLAST_TINTS[slotIndex],
+            baseDamage * BLAST_DAMAGE_MULTIPLIER, targeting.getCurrentTarget(),
+            getTargetDirection()
         );
     }
 
