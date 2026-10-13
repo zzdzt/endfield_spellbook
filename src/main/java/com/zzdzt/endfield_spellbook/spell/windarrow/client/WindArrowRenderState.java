@@ -33,6 +33,15 @@ public final class WindArrowRenderState {
     public final float headTexturePulse;
     /** 命中爆闪年龄（age − 3.0，负值表示前锋尚未抵达）。 */
     public final float impactAge;
+    /** 命中爆闪进度与衰减：普通命中（3s 曲线）与终结放射（5.5s 曲线）各一组，仅依赖 age。 */
+    public final float impactProgressNormal;
+    public final float impactFadeNormal;
+    public final float impactProgressFinal;
+    public final float impactFadeFinal;
+    /** 贴图前锋三面慢旋基准角（age × 2.5）。 */
+    public final float headTextureSpin;
+    /** 尖端星芒旋转角（age × 21）。 */
+    public final float tipGlintSpin;
     public final Vec3 originWorld;
     public final Vec3 direction;
     public final Vec3 cameraWorld;
@@ -47,6 +56,9 @@ public final class WindArrowRenderState {
                                  float activeTrailLength, float beamAlpha, float arcAlpha,
                                  float trailAlpha, float afterglowAlpha, float headPulse,
                                  float headTexturePulse, float impactAge,
+                                 float impactProgressNormal, float impactFadeNormal,
+                                 float impactProgressFinal, float impactFadeFinal,
+                                 float headTextureSpin, float tipGlintSpin,
                                  Vec3 originWorld, Vec3 direction, Vec3 cameraWorld,
                                  int visualStyle, float bodyHalfHeight,
                                  float yawDegrees, float pitchDegrees) {
@@ -61,6 +73,12 @@ public final class WindArrowRenderState {
         this.headPulse = headPulse;
         this.headTexturePulse = headTexturePulse;
         this.impactAge = impactAge;
+        this.impactProgressNormal = impactProgressNormal;
+        this.impactFadeNormal = impactFadeNormal;
+        this.impactProgressFinal = impactProgressFinal;
+        this.impactFadeFinal = impactFadeFinal;
+        this.headTextureSpin = headTextureSpin;
+        this.tipGlintSpin = tipGlintSpin;
         this.originWorld = originWorld;
         this.direction = direction;
         this.cameraWorld = cameraWorld;
@@ -87,6 +105,12 @@ public final class WindArrowRenderState {
         float headPulse = 0.92f + 0.08f * Mth.sin(age * 1.7f);
         float headTexturePulse = 0.94f + 0.06f * Mth.sin(age * 1.7f);
         float impactAge = age - IMPACT_START_AGE;
+        float impactProgressNormal = Mth.clamp(impactAge / 3.0f, 0.0f, 1.0f);
+        float impactFadeNormal = 1.0f - impactProgressNormal;
+        float impactProgressFinal = Mth.clamp(impactAge / 5.5f, 0.0f, 1.0f);
+        float impactFadeFinal = 1.0f - impactProgressFinal;
+        float headTextureSpin = age * 2.5f;
+        float tipGlintSpin = age * 21.0f;
 
         Vec3 originWorld = new Vec3(
             Mth.lerp(partialTicks, entity.xo, entity.getX()),
@@ -103,7 +127,8 @@ public final class WindArrowRenderState {
 
         return new WindArrowRenderState(age, flightProgress, visibleLength, activeTrailLength,
             beamAlpha, arcAlpha, trailAlpha, afterglowAlpha, headPulse, headTexturePulse,
-            impactAge, originWorld, direction, cameraWorld,
+            impactAge, impactProgressNormal, impactFadeNormal, impactProgressFinal,
+            impactFadeFinal, headTextureSpin, tipGlintSpin, originWorld, direction, cameraWorld,
             entity.getVisualStyle(),
             (float) entity.getBoundingBox().getYsize() * 0.5f,
             entity.getYRot(), entity.getXRot());

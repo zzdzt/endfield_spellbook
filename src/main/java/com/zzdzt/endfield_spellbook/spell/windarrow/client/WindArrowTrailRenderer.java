@@ -57,28 +57,23 @@ public final class WindArrowTrailRenderer {
                                          MultiBufferSource bufferSource) {
         VertexConsumer beam = bufferSource.getBuffer(WindArrowRenderTypes.BEAM);
         // Layer 1: 宽而低亮的蓝色外晕，负责让轨迹在复杂背景上可读。
-        renderWindArrowBillboardRibbon(poseStack, beam, state.originWorld, state.direction,
-            state.cameraWorld, state.visibleLength, state.activeTrailLength, state.age,
+        renderWindArrowBillboardRibbon(poseStack, beam, state, state.activeTrailLength, 0.0f,
             0.018f, 0.355f, 0.10f, 0.39f, 1.0f, state.beamAlpha * 0.58f, 0.14f);
         // Layer 2: 饱和青蓝主带，宽度明显小于外晕，保持箭矢方向感。
-        renderWindArrowBillboardRibbon(poseStack, beam, state.originWorld, state.direction,
-            state.cameraWorld, state.visibleLength, state.activeTrailLength * 0.98f, state.age + 0.7f,
+        renderWindArrowBillboardRibbon(poseStack, beam, state, state.activeTrailLength * 0.98f, 0.7f,
             0.010f, 0.175f, 0.10f, 0.55f, 1.0f, state.beamAlpha * 0.84f, 0.075f);
         // Layer 3: 窄白蓝能量芯，形成清晰的中心高光，不与外晕混成一团。
-        renderWindArrowBillboardRibbon(poseStack, beam, state.originWorld, state.direction,
-            state.cameraWorld, state.visibleLength, state.activeTrailLength * 0.88f, state.age + 1.4f,
+        renderWindArrowBillboardRibbon(poseStack, beam, state, state.activeTrailLength * 0.88f, 1.4f,
             0.0025f, 0.052f, 0.72f, 0.91f, 1.0f, state.beamAlpha * 0.98f, 0.032f);
 
         // 用户提供的 needle 贴图只作为短拖尾内的锐利白青线芯。
         VertexConsumer needle = bufferSource.getBuffer(WindArrowRenderTypes.NEEDLE);
-        renderWindArrowBillboardRibbon(poseStack, needle, state.originWorld, state.direction,
-            state.cameraWorld, state.visibleLength, state.activeTrailLength * 0.72f, state.age + 0.3f,
+        renderWindArrowBillboardRibbon(poseStack, needle, state, state.activeTrailLength * 0.72f, 0.3f,
             0.0010f, 0.022f, 0.92f, 0.985f, 1.0f, state.beamAlpha * 0.88f, 0.014f);
 
         // 星座图用相机朝向纹理带贯穿已揭示轨迹，星芒节点则在后续局部坐标里单独闪烁。
         VertexConsumer constellation = bufferSource.getBuffer(WindArrowRenderTypes.CONSTELLATION);
-        renderWindArrowBillboardRibbon(poseStack, constellation, state.originWorld, state.direction,
-            state.cameraWorld, state.visibleLength, state.visibleLength, state.age + 2.0f,
+        renderWindArrowBillboardRibbon(poseStack, constellation, state, state.visibleLength, 2.0f,
             0.012f, 0.125f, 0.62f, 0.83f, 1.0f, state.trailAlpha * 0.36f, 0.085f);
     }
 
@@ -86,7 +81,7 @@ public final class WindArrowTrailRenderer {
     private static void renderSwirlTrail(WindArrowRenderState state, PoseStack poseStack,
                                         MultiBufferSource bufferSource) {
         VertexConsumer ring = bufferSource.getBuffer(WindArrowRenderTypes.RING);
-        renderWindArrowRibbonArcs(poseStack, ring, state.visibleLength, state.age, state.arcAlpha);
+        renderWindArrowRibbonArcs(poseStack, ring, state);
     }
 
     /** 星芒、锐利闪光与斜置晶片。 */
@@ -94,8 +89,7 @@ public final class WindArrowTrailRenderer {
                                        MultiBufferSource bufferSource) {
         VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
         VertexConsumer shards = bufferSource.getBuffer(WindArrowRenderTypes.SHARDS);
-        renderWindArrowSprites(poseStack, sprites, shards,
-            state.visibleLength, state.age, state.arcAlpha, state.trailAlpha);
+        renderWindArrowSprites(poseStack, sprites, shards, state);
     }
 
     /** 主束退场后的星点连接余痕。 */
@@ -103,8 +97,7 @@ public final class WindArrowTrailRenderer {
                                        MultiBufferSource bufferSource) {
         VertexConsumer glow = bufferSource.getBuffer(WindArrowRenderTypes.GLOW);
         VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
-        renderWindArrowAfterglow(poseStack, glow, sprites,
-            state.visibleLength, state.age, state.afterglowAlpha);
+        renderWindArrowAfterglow(poseStack, glow, sprites, state);
     }
 
     /**
@@ -115,15 +108,20 @@ public final class WindArrowTrailRenderer {
      * normalize 保留 Vec3 的 1.0E-4 零向量语义与原两级 fallback 顺序。
      */
     private static void renderWindArrowBillboardRibbon(PoseStack poseStack, VertexConsumer consumer,
-                                                       Vec3 originWorld, Vec3 direction, Vec3 cameraWorld,
-                                                       float headDistance, float trailLength, float age,
+                                                       WindArrowRenderState state,
+                                                       float trailLength, float ageShift,
                                                        float tailHalfWidth, float headHalfWidth,
                                                        float red, float green, float blue,
                                                        float alpha, float curveAmplitude) {
-        if (headDistance <= 0.01f || trailLength <= 0.01f || alpha <= 0.001f) {
+        if (state.visibleLength <= 0.01f || trailLength <= 0.01f || alpha <= 0.001f) {
             return;
         }
 
+        Vec3 originWorld = state.originWorld;
+        Vec3 direction = state.direction;
+        Vec3 cameraWorld = state.cameraWorld;
+        float headDistance = state.visibleLength;
+        float age = state.age + ageShift;
         float length = Math.min(headDistance, trailLength);
         float tailStart = Math.max(0.0f, headDistance - length);
         int segments = Mth.clamp((int) Math.ceil(length * 12.0f), 24, 96);
@@ -374,7 +372,10 @@ public final class WindArrowTrailRenderer {
      * 由 UV 流动、几何扭转与多层亮度共同产生动态反射，而不是仅靠纯色几何线。
      */
     private static void renderWindArrowRibbonArcs(PoseStack poseStack, VertexConsumer consumer,
-                                                  float length, float age, float alpha) {
+                                                  WindArrowRenderState state) {
+        float length = state.visibleLength;
+        float age = state.age;
+        float alpha = state.arcAlpha;
         if (alpha <= 0.001f || length <= 0.1f) {
             return;
         }
@@ -467,8 +468,11 @@ public final class WindArrowTrailRenderer {
 
     private static void renderWindArrowSprites(PoseStack poseStack, VertexConsumer consumer,
                                                VertexConsumer shardConsumer,
-                                               float length, float age,
-                                               float arcAlpha, float trailAlpha) {
+                                               WindArrowRenderState state) {
+        float length = state.visibleLength;
+        float age = state.age;
+        float arcAlpha = state.arcAlpha;
+        float trailAlpha = state.trailAlpha;
         if (length <= 0.05f) {
             return;
         }
@@ -530,8 +534,11 @@ public final class WindArrowTrailRenderer {
      * 前期低亮叠在光束周围，后期成为清晰但稀疏的蓝色星链。
      */
     private static void renderWindArrowAfterglow(PoseStack poseStack, VertexConsumer glow,
-                                                 VertexConsumer sprites, float length,
-                                                 float age, float alpha) {
+                                                 VertexConsumer sprites,
+                                                 WindArrowRenderState state) {
+        float length = state.visibleLength;
+        float age = state.age;
+        float alpha = state.afterglowAlpha;
         if (length <= 0.1f || alpha <= 0.001f) {
             return;
         }

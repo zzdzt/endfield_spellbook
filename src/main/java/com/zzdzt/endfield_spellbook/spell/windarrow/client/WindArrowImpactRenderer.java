@@ -5,7 +5,6 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanBlastVisualEntity;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.util.Mth;
 
 /**
  * 风矢命中层：普通命中爆闪与终结放射爆闪，全部为贴图三平面交叉绘制。
@@ -26,10 +25,10 @@ public final class WindArrowImpactRenderer {
         WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);
         if (state.visualStyle == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT) {
             drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT),
-                0, state.visibleLength, 0, state.impactAge, false);
+                state, false);
         } else if (state.visualStyle == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_FINAL_HIT) {
             drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT_FINAL),
-                0, state.visibleLength, 0, state.impactAge, true);
+                state, true);
         }
         poseStack.popPose();
     }
@@ -38,12 +37,13 @@ public final class WindArrowImpactRenderer {
      * 贴图版命中爆闪：三张交叉面避免从侧面观看时星芒消失；外层蓝白、内层近白。
      */
     private static void drawArrowImpactTexture(PoseStack poseStack, VertexConsumer consumer,
-                                               float cx, float cy, float cz, float impactAge,
-                                               boolean finalBurst) {
-        float duration = finalBurst ? 5.5f : 3.0f;
-        float t = Mth.clamp(impactAge / duration, 0.0f, 1.0f);
-        float eased = t * t * (3.0f - 2.0f * t);
-        float fade = 1.0f - t;
+                                               WindArrowRenderState state, boolean finalBurst) {
+        float cy = state.visibleLength;
+        float impactAge = state.impactAge;
+        // 进度与衰减曲线来自 RenderState（普通 3s / 终结 5.5s）；eased 与尺寸属于几何映射，留在通道内。
+        float progress = finalBurst ? state.impactProgressFinal : state.impactProgressNormal;
+        float fade = finalBurst ? state.impactFadeFinal : state.impactFadeNormal;
+        float eased = progress * progress * (3.0f - 2.0f * progress);
         // 普通命中之前尺寸偏小，纹理的大部分透明边距又进一步削弱了视觉面积。
         // 提高首帧尺寸与白芯强度，让普通命中一开始就可读；终结爆闪仍维持更大尺度。
         float size = finalBurst ? 0.30f + eased * 1.18f : 0.28f + eased * 0.72f;
@@ -52,7 +52,7 @@ public final class WindArrowImpactRenderer {
 
         for (int plane = 0; plane < 3; plane++) {
             poseStack.pushPose();
-            poseStack.translate(cx, cy, cz);
+            poseStack.translate(0, cy, 0);
             if (plane == 1) {
                 poseStack.mulPose(Axis.XP.rotationDegrees(90.0f));
             } else if (plane == 2) {
