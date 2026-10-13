@@ -667,57 +667,10 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         // 发射光束前，剑尖对准发射方向（startBlast 此前不设置朝向，剑可能指向别处）
         if (lookDir.lengthSqr() > 1e-6) faceDirection(lookDir, 1.0);
 
-        var blockHit = level().clip(new ClipContext(startPos, endPos,
-            ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
-        Vec3 hitLoc = blockHit.getType() == HitResult.Type.MISS
-            ? endPos : blockHit.getLocation();
-
-        float[] tint = BLAST_TINTS[slotIndex];
-        LizhiYanBlastVisualEntity blastEntity = new LizhiYanBlastVisualEntity(
-            EntityRegistry.LIZHI_YAN_BLAST_VISUAL.get(),
-            level(), startPos, hitLoc, lookDir, tint
+        LizhiYanBlastExecutor.fire(
+            this, owner, startPos, lookDir, range, BLAST_TINTS[slotIndex],
+            baseDamage * BLAST_DAMAGE_MULTIPLIER, targeting.getCurrentTarget()
         );
-        level().addFreshEntity(blastEntity);
-
-        LivingEntity hitEntity = findEntityOnPath(owner, startPos, hitLoc);
-        if (hitEntity != null) {
-            float damage = baseDamage * BLAST_DAMAGE_MULTIPLIER;
-            var spell = SpellRegistry.LIZHI_YAN.get();
-            SpellDamageSource source = SpellDamageSource.source(this, owner, spell).setIFrames(0);
-            DamageSources.applyDamage(hitEntity, damage, source);
-            //spawnBlastHitParticles(hitEntity.position().add(0, hitEntity.getBbHeight()/2, 0));
-        }
-
-        level().playSound(null, getX(), getY(), getZ(),
-            SoundEvents.ENDER_DRAGON_SHOOT, SoundSource.PLAYERS, 0.6f, 1.2f);
-    }
-
-    @Nullable
-    private LivingEntity findEntityOnPath(LivingEntity owner, Vec3 start, Vec3 end) {
-        LivingEntity closest = null;
-        double closestDist = Double.MAX_VALUE;
-        AABB scanBox = new AABB(start, end).inflate(1.0);
-        var entities = level().getEntities(this, scanBox, e -> {
-            if (e == this || e == owner) return false;
-            if (!(e instanceof LivingEntity living)) return false;
-            if (e instanceof net.minecraft.world.entity.player.Player player
-                && (targeting.getCurrentTarget() == null || !player.getUUID().equals(targeting.getCurrentTarget().getUUID()))) {
-                return false;
-            }
-            return living.isAlive() && living.canBeSeenAsEnemy();
-        });
-        for (Entity e : entities) {
-            AABB entityBox = e.getBoundingBox().inflate(0.3);
-            Optional<Vec3> intercept = entityBox.clip(start, end);
-            if (intercept.isPresent()) {
-                double dist = start.distanceTo(intercept.get());
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closest = (LivingEntity) e;
-                }
-            }
-        }
-        return closest;
     }
 
     private Vec3 getTargetDirection() {
