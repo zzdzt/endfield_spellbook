@@ -78,25 +78,25 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     private static final int POSITION_UPDATE_INTERVAL = 2;
 
     //攻击时序
-    private static final int CHARGE_TICKS_STAB = 10;
-    private static final int COOLDOWN_TICKS_STAB = 10;
-    private static final int COOLDOWN_TICKS_BLAST = 40;
+    static final int CHARGE_TICKS_STAB = 10;
+    static final int COOLDOWN_TICKS_STAB = 10;
+    static final int COOLDOWN_TICKS_BLAST = 40;
     private static final float[] STAB_DAMAGE_MULTIPLIERS = {1.0f, 1.3f};
     private static final float BLAST_DAMAGE_MULTIPLIER = 3.0f;
     private static final int RETURN_TICKS = 10;
     // 冲刺硬超时兜底（tick）：目标乱跑追不上时放弃穿刺，防止相位机卡死
-    private static final int STAB_MAX_TICKS = 60;
+    static final int STAB_MAX_TICKS = 60;
     // 协同光束等待超时（tick）：三剑都完成前两段穿刺后，等它们全部就绪再齐射；超时强制放行
-    private static final int BLAST_READY_TIMEOUT = 60;
+    static final int BLAST_READY_TIMEOUT = 60;
     // 三剑全部就位后的聚气停留（tick）：给三剑对齐时间 + 蓄力观感
-    private static final int BLAST_CHARGE_TICKS = 6;
+    static final int BLAST_CHARGE_TICKS = 6;
 
     //旋转动作时序
     private static final int DEFAULT_SPIN_TICKS = 50;
     private static final float SPIN_RADIUS = 1.5f;
     private static final float SPIN_HEIGHT = 1.2f;
     private static final float SPIN_CENTER_DISTANCE = 2.0f;
-    private static final int BLAST_TO_SPIN_DELAY = 4;
+    static final int BLAST_TO_SPIN_DELAY = 4;
     private int spinTicks = DEFAULT_SPIN_TICKS;
 
     //运行时状态
@@ -109,10 +109,11 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     // 目标获取与丢失视线判定独立维护，实体类负责消费目标并驱动攻击状态机。
     private final LizhiYanTargeting targeting = new LizhiYanTargeting(this);
     private final LizhiYanMovementController movement = new LizhiYanMovementController(this);
+    private final LizhiYanAttackController attackController = new LizhiYanAttackController(this);
 
-    private Phase phase = Phase.IDLE;
-    private int phaseTick = 0;
-    private int attackIndex = 0;
+    Phase phase = Phase.IDLE;
+    int phaseTick = 0;
+    int attackIndex = 0;
 
     // 位置缓存
     private Vec3 formationPos = Vec3.ZERO;
@@ -126,12 +127,12 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     private int returnTick = 0;
 
-    @Nullable private Vec3 blastLockedDirection;
+    @Nullable Vec3 blastLockedDirection;
     // 协同光束站位锁定：进 BLAST_READY 时锁定一次，之后不随玩家移动漂移，
     // 否则 closeTo 判定永远追不上移动目标 → 各自超时错峰发射
-    @Nullable private Vec3 blastReadyPos;
+    @Nullable Vec3 blastReadyPos;
     // 三剑全部就位后的聚气停留计数（barrier 通过后递增，到 BLAST_CHARGE_TICKS 才发射）
-    private int blastReadyHold;
+    int blastReadyHold;
 
     // 方向缓存
     private float currentYaw = 0f;
@@ -174,6 +175,14 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     public void setBaseDamage(float damage) { this.baseDamage = damage; }
     public void setRange(float range) { this.range = range; }
+    
+    /** Narrow package-level bridges used by the attack-state controller. */
+    LizhiYanTargeting targetingController() { return targeting; }
+    int getSpinTicksForController() { return spinTicks; }
+    void setChargeScaleSynced(float value) { entityData.set(CHARGE_SCALE, value); }
+    void resetThrustDamageState() { thrustController.resetDamageState(); }
+    void forceFinishThrust() { thrustController.forceFinish(); }
+
 
     @Nullable
     public LivingEntity getOwner() {
@@ -300,7 +309,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         else { updateFormationPosition(owner); }
 
         targeting.update(owner, range);
-        updateAttackState(owner);
+        attackController.tick(owner);
         syncStateToClient();
     }
 
@@ -347,7 +356,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     //瞄准方向
-    private void updateAimDirection(LivingEntity owner) {
+    void updateAimDirection(LivingEntity owner) {
         Entity targetToAim = targeting.getCurrentTarget() != null ? targeting.getCurrentTarget() : targeting.getPendingTarget();
 
         Vec3 aimDir;
@@ -393,119 +402,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     private void updateAttackState(LivingEntity owner) {
         switch (phase) {
             case IDLE:
-                if (targeting.getPendingTarget() != null && targeting.getPendingTarget().isAlive()) {
-                    targeting.setCurrentTarget(targeting.getPendingTarget());
-                    targeting.setPendingTarget(null);
-                    attackIndex = 0;
-                    targeting.resetLostSightTick();
-                }
-
-                if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
-                    phase = Phase.CHARGE;
-                    phaseTick = 0;
-                    blastLockedDirection = null;
-                    thrustController.resetDamageState();
-                }
-                break;
-
-            case CHARGE:
-                phaseTick++;
-                int chargeThreshold = CHARGE_TICKS_STAB;
-
-                if (targeting.getCurrentTarget() != null) updateAimDirection(owner);
-
-                if (attackIndex >= 2 && targeting.getCurrentTarget() != null) {
-                    Vec3 tc = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
-                    blastLockedDirection = tc.subtract(position()).normalize();
-                }
-
-                float chargeProgress = phaseTick / (float) chargeThreshold;
-                float pulse = 1.0f + (float) Math.sin(chargeProgress * Math.PI) * 0.25f;
-                entityData.set(CHARGE_SCALE, pulse);
-
-                if (phaseTick >= chargeThreshold) {
-                    entityData.set(CHARGE_SCALE, 1.0f);
-                    if (attackIndex < 2) startStab();
-                    else startBlastReady();
-                }
-                break;
-
-            case STAB:
-                // 控制器驱动穿刺细分阶段；主阶段保留硬超时兜底。
-                phaseTick++;
-                if (phaseTick >= STAB_MAX_TICKS) thrustController.forceFinish();
-                break;
-
-            case BLAST_READY:
-                // 协同光束屏障：三剑各自完成 stab×2 后在此飞向齐射站位，全部到位后**先聚气停留**
-                // 再齐射（让三剑有时间对齐 + 蓄力观感），之后一起进入 BLAST_DELAY → 同步 SPIN
-                phaseTick++;
-                if (allAtBlastPositions(owner)) blastReadyHold++;
-                else blastReadyHold = 0;
-                if (blastReadyHold >= BLAST_CHARGE_TICKS || phaseTick >= BLAST_READY_TIMEOUT) {
-                    startBlast(owner);
-                    blastReadyHold = 0;
-                }
-                break;
-
-            case BLAST:
-                phase = Phase.BLAST_DELAY;
-                phaseTick = 0;
-                break;
-
-            case BLAST_DELAY:
-                phaseTick++;
-                if (phaseTick >= BLAST_TO_SPIN_DELAY) {
-                    phase = Phase.SPIN;
-                    phaseTick = 0;
-                }
-                break;
-
-            case SPIN:
-                phaseTick++;
-                if (phaseTick >= spinTicks) {
-                    attackIndex = 0;
-                    phase = Phase.COOLDOWN;
-                    phaseTick = 0;
-                    // 释放本轮齐射站位锁定与聚气计数，下一轮重新锁定
-                    blastReadyPos = null;
-                    blastReadyHold = 0;
-                }
-                break;
-
-            case COOLDOWN:
-                phaseTick++;
-                int cooldown = (attackIndex == 0) ? COOLDOWN_TICKS_BLAST : COOLDOWN_TICKS_STAB;
-
-                if (phaseTick >= cooldown) {
-                    if (targeting.getPendingTarget() != null && targeting.getPendingTarget().isAlive()) {
-                        targeting.setCurrentTarget(targeting.getPendingTarget());
-                        targeting.setPendingTarget(null);
-                        attackIndex = 0;
-                        phase = Phase.CHARGE;
-                        phaseTick = 0;
-                        blastLockedDirection = null;
-                        thrustController.resetDamageState();
-                    } else if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
-                        phase = Phase.CHARGE;
-                        phaseTick = 0;
-                        blastLockedDirection = null;
-                        thrustController.resetDamageState();
-                    } else {
-                        phase = Phase.IDLE;
-                        phaseTick = 0;
-                        attackIndex = 0;
-                    }
-                }
-                break;
-
-
-        }
-    }
-
-    // 戳刺（阻尼追踪相位机：后顿 → 冲刺 → 惯性滑行，物理时长，参照 YujianCraft flyToward）
-    // 穿刺细分状态交由专用控制器；实体继续编排主攻击阶段。
-    private void startStab() {
+       Stab() {
         thrustController.start();
     }
 
@@ -641,7 +538,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     // 协同光束：进入归位等待态（三剑都就绪后一起 startBlast）
-    private void startBlastReady() {
+    void startBlastReady() {
         phase = Phase.BLAST_READY;
         phaseTick = 0;
         blastReadyHold = 0;
@@ -734,7 +631,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     // 冲击波
-    private void startBlast(LivingEntity owner) {
+    void startBlast(LivingEntity owner) {
         phase = Phase.BLAST;
         phaseTick = 0;
         // ⚠️ 此处不能清空 blastReadyPos：BLAST/BLAST_DELAY 阶段还要靠它悬停在齐射站位。
