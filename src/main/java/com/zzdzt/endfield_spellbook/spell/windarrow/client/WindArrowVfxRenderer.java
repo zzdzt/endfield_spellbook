@@ -59,7 +59,7 @@ public final class WindArrowVfxRenderer {
             "wind_arrow_impact", TEXTURE_WIND_ARROW_IMPACT, false);
 
     private static final ResourceLocation TEXTURE_WIND_ARROW_SPRITES =
-        ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_sprites.png");
+        ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_star_glint.png");
     private static final RenderType WIND_ARROW_SPRITES =
         EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
             "wind_arrow_sprites", TEXTURE_WIND_ARROW_SPRITES, false);
@@ -325,10 +325,24 @@ public final class WindArrowVfxRenderer {
             float size = (i % 4 == 1 ? 0.085f : (i % 3 == 0 ? 0.052f : 0.032f))
                 * (0.82f + pulse * 0.34f);
             drawWindArrowSprite(poseStack, consumer, x, y, z,
-                size, size * (i % 4 == 1 ? 1.36f : 1.0f), 2, phase * 36.0f,
+                size, size * (i % 4 == 1 ? 1.36f : 1.0f), i % 4 == 1 ? 2 : 0, phase * 36.0f,
                 i % 4 == 1 ? 0.98f : 0.72f,
                 i % 4 == 1 ? 0.99f : 0.87f, 1.0f,
                 trailAlpha * (i % 4 == 1 ? 0.92f : 0.57f) * pulse);
+        }
+
+        // 稀疏锐利闪光：窄白芯配冷蓝外晕，位置与大星芒错开，避免形成均匀的点线链。
+        float[] flashPositions = {0.15f, 0.45f, 0.72f, 0.93f};
+        for (int i = 0; i < flashPositions.length; i++) {
+            float y = length * flashPositions[i];
+            float phase = age * 0.47f + i * 1.91f;
+            float radius = (i % 2 == 0 ? 0.22f : 0.31f);
+            float x = (float) Math.cos(phase) * radius;
+            float z = (float) Math.sin(phase * 0.87f + i * 0.4f) * radius;
+            float pulse = 0.26f + 0.74f * (0.5f + 0.5f * Mth.sin(age * 1.9f + i * 2.6f));
+            drawWindArrowSprite(poseStack, consumer, x, y, z,
+                0.115f, 0.024f, 1, phase * 48.0f + i * 31.0f,
+                0.78f, 0.93f, 1.0f, trailAlpha * 0.58f * pulse);
         }
 
         // 少数斜置晶片/长碎光。尺寸很小，避免回到“密集线圈+杂乱刮线”的观感。
@@ -493,7 +507,7 @@ public final class WindArrowVfxRenderer {
                     0.61f, 0.82f, 1.0f, alpha * 0.52f * pulse);
             } else {
                 drawWindArrowSprite(poseStack, sprites, (float) p.x, (float) p.y, (float) p.z,
-                    size * 0.52f, size * 0.52f, 2, age * 9.0f + i * 17.0f,
+                    size * 0.52f, size * 0.52f, 0, age * 9.0f + i * 17.0f,
                     0.50f, 0.72f, 1.0f, alpha * 0.42f * pulse);
             }
         }
@@ -551,7 +565,7 @@ public final class WindArrowVfxRenderer {
     }
 
     /**
-     * 绘制 wind_arrow_sprites.png 的单格 atlas。
+     * 绘制 wind_arrow_star_glint.png 的单格 atlas。
      * atlas 为 4 列、每列占 0.25 的 U 区间；透明边缘依赖线性过滤柔化。
      */
     private static void drawWindArrowSpriteAtOrigin(PoseStack poseStack, VertexConsumer consumer,
