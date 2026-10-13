@@ -4,7 +4,6 @@ import com.zzdzt.endfield_spellbook.registry.EntityRegistry;
 import com.zzdzt.endfield_spellbook.registry.SpellRegistry;
 import io.redspace.ironsspellbooks.damage.DamageSources;
 import io.redspace.ironsspellbooks.damage.SpellDamageSource;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
