@@ -23,7 +23,7 @@ public final class WindArrowTrailRenderer {
      */
     public static void renderMainRibbon(WindArrowRenderState state, PoseStack poseStack,
                                         MultiBufferSource bufferSource) {
-        VertexConsumer beam = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_BEAM);
+        VertexConsumer beam = bufferSource.getBuffer(WindArrowRenderTypes.BEAM);
         // Layer 1: 宽而低亮的蓝色外晕，负责让轨迹在复杂背景上可读。
         renderWindArrowBillboardRibbon(poseStack, beam, state.originWorld, state.direction,
             state.cameraWorld, state.visibleLength, state.activeTrailLength, state.age,
@@ -38,13 +38,13 @@ public final class WindArrowTrailRenderer {
             0.0025f, 0.052f, 0.72f, 0.91f, 1.0f, state.beamAlpha * 0.98f, 0.032f);
 
         // 用户提供的 needle 贴图只作为短拖尾内的锐利白青线芯。
-        VertexConsumer needle = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_NEEDLE);
+        VertexConsumer needle = bufferSource.getBuffer(WindArrowRenderTypes.NEEDLE);
         renderWindArrowBillboardRibbon(poseStack, needle, state.originWorld, state.direction,
             state.cameraWorld, state.visibleLength, state.activeTrailLength * 0.72f, state.age + 0.3f,
             0.0010f, 0.022f, 0.92f, 0.985f, 1.0f, state.beamAlpha * 0.88f, 0.014f);
 
         // 星座图用相机朝向纹理带贯穿已揭示轨迹，星芒节点则在后续局部坐标里单独闪烁。
-        VertexConsumer constellation = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_CONSTELLATION);
+        VertexConsumer constellation = bufferSource.getBuffer(WindArrowRenderTypes.CONSTELLATION);
         renderWindArrowBillboardRibbon(poseStack, constellation, state.originWorld, state.direction,
             state.cameraWorld, state.visibleLength, state.visibleLength, state.age + 2.0f,
             0.012f, 0.125f, 0.62f, 0.83f, 1.0f, state.trailAlpha * 0.36f, 0.085f);
@@ -53,15 +53,15 @@ public final class WindArrowTrailRenderer {
     /** 银白翻卷弧带：swirl 贴图沿四组开口椭圆弧铺展。 */
     public static void renderSwirlTrail(WindArrowRenderState state, PoseStack poseStack,
                                         MultiBufferSource bufferSource) {
-        VertexConsumer ring = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_RING);
+        VertexConsumer ring = bufferSource.getBuffer(WindArrowRenderTypes.RING);
         renderWindArrowRibbonArcs(poseStack, ring, state.visibleLength, state.age, state.arcAlpha);
     }
 
     /** 星芒、锐利闪光与斜置晶片。 */
     public static void renderStarGlint(WindArrowRenderState state, PoseStack poseStack,
                                        MultiBufferSource bufferSource) {
-        VertexConsumer sprites = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_SPRITES);
-        VertexConsumer shards = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_SHARDS);
+        VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
+        VertexConsumer shards = bufferSource.getBuffer(WindArrowRenderTypes.SHARDS);
         renderWindArrowSprites(poseStack, sprites, shards,
             state.visibleLength, state.age, state.arcAlpha, state.trailAlpha);
     }
@@ -69,8 +69,8 @@ public final class WindArrowTrailRenderer {
     /** 主束退场后的星点连接余痕。 */
     public static void renderAfterglow(WindArrowRenderState state, PoseStack poseStack,
                                        MultiBufferSource bufferSource) {
-        VertexConsumer glow = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_GLOW);
-        VertexConsumer sprites = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_SPRITES);
+        VertexConsumer glow = bufferSource.getBuffer(WindArrowRenderTypes.GLOW);
+        VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
         renderWindArrowAfterglow(poseStack, glow, sprites,
             state.visibleLength, state.age, state.trailAlpha);
     }
@@ -162,13 +162,13 @@ public final class WindArrowTrailRenderer {
             Vec3 left1 = c1.subtract(side1.scale(width1));
             Vec3 right1 = c1.add(side1.scale(width1));
 
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) left0.x, (float) left0.y, (float) left0.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) left0.x, (float) left0.y, (float) left0.z,
                 t0, 1.0f, red, green, blue, alpha * fade0, 0.0f, 1.0f, 0.0f);
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) right0.x, (float) right0.y, (float) right0.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) right0.x, (float) right0.y, (float) right0.z,
                 t0, 0.0f, red, green, blue, alpha * fade0, 0.0f, 1.0f, 0.0f);
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) right1.x, (float) right1.y, (float) right1.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) right1.x, (float) right1.y, (float) right1.z,
                 t1, 0.0f, red, green, blue, alpha * fade1, 0.0f, 1.0f, 0.0f);
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) left1.x, (float) left1.y, (float) left1.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) left1.x, (float) left1.y, (float) left1.z,
                 t1, 1.0f, red, green, blue, alpha * fade1, 0.0f, 1.0f, 0.0f);
         }
     }
@@ -258,13 +258,13 @@ public final class WindArrowTrailRenderer {
             // 因此 UV 保持在 0..1；流动感由弧线相位和几何扭转提供。
             float u0 = s0;
             float u1 = s1;
-            WindArrowVfxRenderer.emitVertex(pose, consumer, x0, y0 + half0, z0, u0, 0,
+            WindArrowRenderUtil.emitVertex(pose, consumer, x0, y0 + half0, z0, u0, 0,
                 red, green, blue, alpha0, 0, 0, 1);
-            WindArrowVfxRenderer.emitVertex(pose, consumer, x0, y0 - half0, z0, u0, 1,
+            WindArrowRenderUtil.emitVertex(pose, consumer, x0, y0 - half0, z0, u0, 1,
                 red, green, blue, alpha0, 0, 0, 1);
-            WindArrowVfxRenderer.emitVertex(pose, consumer, x1, y1 - half1, z1, u1, 1,
+            WindArrowRenderUtil.emitVertex(pose, consumer, x1, y1 - half1, z1, u1, 1,
                 red, green, blue, alpha1, 0, 0, 1);
-            WindArrowVfxRenderer.emitVertex(pose, consumer, x1, y1 + half1, z1, u1, 0,
+            WindArrowRenderUtil.emitVertex(pose, consumer, x1, y1 + half1, z1, u1, 0,
                 red, green, blue, alpha1, 0, 0, 1);
         }
     }
@@ -288,7 +288,7 @@ public final class WindArrowTrailRenderer {
             float pulse = 0.22f + 0.78f * (0.5f + 0.5f * Mth.sin(age * 1.85f + i * 2.1f));
             float size = (i % 4 == 1 ? 0.085f : (i % 3 == 0 ? 0.052f : 0.032f))
                 * (0.82f + pulse * 0.34f);
-            WindArrowVfxRenderer.drawWindArrowSprite(poseStack, consumer, x, y, z,
+            WindArrowRenderUtil.drawSprite(poseStack, consumer, x, y, z,
                 size, size * (i % 4 == 1 ? 1.36f : 1.0f), i % 4 == 1 ? 2 : 0, phase * 36.0f,
                 i % 4 == 1 ? 0.98f : 0.72f,
                 i % 4 == 1 ? 0.99f : 0.87f, 1.0f,
@@ -304,7 +304,7 @@ public final class WindArrowTrailRenderer {
             float x = (float) Math.cos(phase) * radius;
             float z = (float) Math.sin(phase * 0.87f + i * 0.4f) * radius;
             float pulse = 0.26f + 0.74f * (0.5f + 0.5f * Mth.sin(age * 1.9f + i * 2.6f));
-            WindArrowVfxRenderer.drawWindArrowSprite(poseStack, consumer, x, y, z,
+            WindArrowRenderUtil.drawSprite(poseStack, consumer, x, y, z,
                 0.115f, 0.024f, 1, phase * 48.0f + i * 31.0f,
                 0.78f, 0.93f, 1.0f, trailAlpha * 0.58f * pulse);
         }
@@ -322,7 +322,7 @@ public final class WindArrowTrailRenderer {
             poseStack.mulPose(Axis.YP.rotationDegrees(phase * 40.0f + i * 65.0f));
             // 独立晶体图集：四格分别提供细长切面、弧形碎片、紧凑晶片与双碎片组合。
             // 近银白 tint 保留贴图高光层次，强蓝色由独立外晕承担。
-            WindArrowVfxRenderer.drawWindArrowSpriteAtOrigin(poseStack, shardConsumer,
+            WindArrowRenderUtil.drawSpriteAtOrigin(poseStack, shardConsumer,
                 0.105f, 0.155f, i % 4, 0.86f, 0.96f, 1.0f,
                 fade * 0.54f);
             poseStack.popPose();
@@ -372,11 +372,11 @@ public final class WindArrowTrailRenderer {
             float size = (i % 4 == 2 ? 0.047f : 0.025f) * (0.8f + 0.2f * pulse);
             Vec3 p = points[i];
             if (i % 3 == 0) {
-                WindArrowVfxRenderer.drawWindArrowSprite(poseStack, sprites, (float) p.x, (float) p.y, (float) p.z,
+                WindArrowRenderUtil.drawSprite(poseStack, sprites, (float) p.x, (float) p.y, (float) p.z,
                     size, size * 1.08f, 2, age * 11.0f + i * 23.0f,
                     0.61f, 0.82f, 1.0f, alpha * 0.52f * pulse);
             } else {
-                WindArrowVfxRenderer.drawWindArrowSprite(poseStack, sprites, (float) p.x, (float) p.y, (float) p.z,
+                WindArrowRenderUtil.drawSprite(poseStack, sprites, (float) p.x, (float) p.y, (float) p.z,
                     size * 0.52f, size * 0.52f, 0, age * 9.0f + i * 17.0f,
                     0.50f, 0.72f, 1.0f, alpha * 0.42f * pulse);
             }
@@ -415,13 +415,13 @@ public final class WindArrowTrailRenderer {
             Vec3 p3 = end.add(o0);
             float u0 = (float) i / segments;
             float u1 = (float) (i + 1) / segments;
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) p0.x, (float) p0.y, (float) p0.z, u0, 0,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p0.x, (float) p0.y, (float) p0.z, u0, 0,
                 red, green, blue, alpha, (float) (o0.x / radius), (float) (o0.y / radius), (float) (o0.z / radius));
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) p1.x, (float) p1.y, (float) p1.z, u1, 0,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p1.x, (float) p1.y, (float) p1.z, u1, 0,
                 red, green, blue, alpha, (float) (o1.x / radius), (float) (o1.y / radius), (float) (o1.z / radius));
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) p2.x, (float) p2.y, (float) p2.z, u1, 1,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p2.x, (float) p2.y, (float) p2.z, u1, 1,
                 red, green, blue, alpha, (float) (o1.x / radius), (float) (o1.y / radius), (float) (o1.z / radius));
-            WindArrowVfxRenderer.emitVertex(pose, consumer, (float) p3.x, (float) p3.y, (float) p3.z, u0, 1,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p3.x, (float) p3.y, (float) p3.z, u0, 1,
                 red, green, blue, alpha, (float) (o0.x / radius), (float) (o0.y / radius), (float) (o0.z / radius));
         }
     }

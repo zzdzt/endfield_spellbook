@@ -19,13 +19,13 @@ public final class WindArrowHeadRenderer {
                                   MultiBufferSource bufferSource) {
         // 箭矢前锋：几何楔形保持体积感，专用晶体贴图补足白芯、切面和锐利边缘。
         float tipY = state.visibleLength;
-        VertexConsumer glow = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_GLOW);
+        VertexConsumer glow = bufferSource.getBuffer(WindArrowRenderTypes.GLOW);
         renderGeometryHead(poseStack, glow, tipY, state.age, state.beamAlpha);
-        VertexConsumer arrowHead = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_HEAD);
+        VertexConsumer arrowHead = bufferSource.getBuffer(WindArrowRenderTypes.HEAD);
         renderTextureHead(poseStack, arrowHead, 0.0f, tipY, 0.004f, state.age, state.beamAlpha);
         // 中心星芒降为较小的尖端高光，避免盖过箭头轮廓。
-        VertexConsumer sprites = bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_SPRITES);
-        WindArrowVfxRenderer.drawWindArrowSprite(poseStack, sprites, 0.0f, tipY, 0.008f,
+        VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
+        WindArrowRenderUtil.drawSprite(poseStack, sprites, 0.0f, tipY, 0.008f,
             0.034f, 0.047f, 2, state.age * 21.0f,
             0.96f, 0.99f, 1.0f, state.beamAlpha * 0.48f);
     }
@@ -51,7 +51,7 @@ public final class WindArrowHeadRenderer {
             poseStack.pushPose();
             poseStack.translate(cx, centerY, cz);
             poseStack.mulPose(Axis.YP.rotationDegrees(plane * 60.0f + age * 2.5f));
-            WindArrowVfxRenderer.drawWindArrowSpriteAtOrigin(poseStack, consumer,
+            WindArrowRenderUtil.drawSpriteAtOrigin(poseStack, consumer,
                 halfWidth, halfHeight, plane == 0 ? 0 : 1,
                 0.90f, 0.97f, 1.0f,
                 alpha * (plane == 0 ? 0.92f : 0.58f));
@@ -76,29 +76,29 @@ public final class WindArrowHeadRenderer {
         PoseStack.Pose pose = poseStack.last();
 
         // 正面楔形：亮白中心，青蓝外缘。
-        WindArrowVfxRenderer.emitVertex(pose, consumer, 0.0f, tipY, 0.0f, 0.5f, 0.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, 0.0f, tipY, 0.0f, 0.5f, 0.0f,
             0.94f, 0.99f, 1.0f, tipAlpha, 0.0f, 0.0f, 1.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, -halfWidth, baseY, 0.0f, 0.0f, 1.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, -halfWidth, baseY, 0.0f, 0.0f, 1.0f,
             0.20f, 0.72f, 1.0f, wingAlpha, 0.0f, 0.0f, 1.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, halfWidth, baseY, 0.0f, 1.0f, 1.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, halfWidth, baseY, 0.0f, 1.0f, 1.0f,
             0.20f, 0.72f, 1.0f, wingAlpha, 0.0f, 0.0f, 1.0f);
 
         // 侧向交叉楔形，避免从俯视或侧视时箭头完全变成一条线。
-        WindArrowVfxRenderer.emitVertex(pose, consumer, 0.0f, tipY, 0.0f, 0.5f, 0.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, 0.0f, tipY, 0.0f, 0.5f, 0.0f,
             0.80f, 0.94f, 1.0f, tipAlpha * 0.92f, 1.0f, 0.0f, 0.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, 0.0f, baseY, -halfWidth * 0.72f, 0.0f, 1.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, 0.0f, baseY, -halfWidth * 0.72f, 0.0f, 1.0f,
             0.12f, 0.52f, 1.0f, wingAlpha * 0.82f, 1.0f, 0.0f, 0.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, 0.0f, baseY, halfWidth * 0.72f, 1.0f, 1.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, 0.0f, baseY, halfWidth * 0.72f, 1.0f, 1.0f,
             0.12f, 0.52f, 1.0f, wingAlpha * 0.82f, 1.0f, 0.0f, 0.0f);
 
         // 短白芯将箭头尖端与蓝色主束视觉连接起来。
         float coreWidth = halfWidth * 0.19f;
         float coreBase = tipY - length * 0.72f;
-        WindArrowVfxRenderer.emitVertex(pose, consumer, 0.0f, tipY + 0.012f, 0.001f, 0.5f, 0.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, 0.0f, tipY + 0.012f, 0.001f, 0.5f, 0.0f,
             1.0f, 1.0f, 1.0f, alpha, 0.0f, 0.0f, 1.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, -coreWidth, coreBase, 0.001f, 0.0f, 1.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, -coreWidth, coreBase, 0.001f, 0.0f, 1.0f,
             0.72f, 0.91f, 1.0f, alpha * 0.92f, 0.0f, 0.0f, 1.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, coreWidth, coreBase, 0.001f, 1.0f, 1.0f,
+        WindArrowRenderUtil.emitVertex(pose, consumer, coreWidth, coreBase, 0.001f, 1.0f, 1.0f,
             0.72f, 0.91f, 1.0f, alpha * 0.92f, 0.0f, 0.0f, 1.0f);
     }
 }

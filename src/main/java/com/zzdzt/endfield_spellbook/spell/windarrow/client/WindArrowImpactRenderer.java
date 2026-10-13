@@ -35,13 +35,13 @@ public final class WindArrowImpactRenderer {
 
     private static void renderHit(WindArrowRenderState state, LizhiYanBlastVisualEntity entity,
                                   PoseStack poseStack, MultiBufferSource bufferSource) {
-        drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_IMPACT),
+        drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT),
             0, entity.distance, 0, state.age - IMPACT_START_AGE, false);
     }
 
     private static void renderFinalHit(WindArrowRenderState state, LizhiYanBlastVisualEntity entity,
                                        PoseStack poseStack, MultiBufferSource bufferSource) {
-        drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowVfxRenderer.WIND_ARROW_IMPACT_FINAL),
+        drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT_FINAL),
             0, entity.distance, 0, state.age - IMPACT_START_AGE, true);
     }
 
@@ -69,28 +69,11 @@ public final class WindArrowImpactRenderer {
             } else if (plane == 2) {
                 poseStack.mulPose(Axis.YP.rotationDegrees(90.0f));
             }
-            drawArrowImpactQuad(poseStack, consumer, size * 1.15f,
+            WindArrowRenderUtil.drawQuad(poseStack, consumer, size * 1.15f,
                 0.40f, 0.66f, 1.0f, outerAlpha);
-            drawArrowImpactQuad(poseStack, consumer, size * 0.66f,
+            WindArrowRenderUtil.drawQuad(poseStack, consumer, size * 0.66f,
                 0.88f, 0.97f, 1.0f, coreAlpha);
             poseStack.popPose();
         }
-    }
-
-    private static void drawArrowImpactQuad(PoseStack poseStack, VertexConsumer consumer,
-                                            float size, float red, float green,
-                                            float blue, float alpha) {
-        if (alpha <= 0.001f || size <= 0.001f) {
-            return;
-        }
-        PoseStack.Pose pose = poseStack.last();
-        WindArrowVfxRenderer.emitVertex(pose, consumer, -size, -size, 0.0f, 0.0f, 1.0f,
-            red, green, blue, alpha, 0.0f, 0.0f, 1.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, size, -size, 0.0f, 1.0f, 1.0f,
-            red, green, blue, alpha, 0.0f, 0.0f, 1.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, size, size, 0.0f, 1.0f, 0.0f,
-            red, green, blue, alpha, 0.0f, 0.0f, 1.0f);
-        WindArrowVfxRenderer.emitVertex(pose, consumer, -size, size, 0.0f, 0.0f, 0.0f,
-            red, green, blue, alpha, 0.0f, 0.0f, 1.0f);
     }
 }
