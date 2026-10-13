@@ -28,6 +28,15 @@ public final class WindArrowTrailRenderer {
     private static final float[] FLASH_POSITIONS = {0.15f, 0.45f, 0.72f, 0.93f};
     private static final float[] SHARD_POSITIONS = {0.24f, 0.58f, 0.81f};
 
+    // 热路径原语缓冲：MC 渲染在 RenderThread 单线程执行，复用同一数组避免每帧每层重复分配。
+    // billboard segments 上限 96（Mth.clamp 保证），afterglow 节点上限 22。
+    private static final double[] RIBBON_CENTER_X = new double[97];
+    private static final double[] RIBBON_CENTER_Y = new double[97];
+    private static final double[] RIBBON_CENTER_Z = new double[97];
+    private static final double[] AFTERGLOW_NODE_X = new double[22];
+    private static final double[] AFTERGLOW_NODE_Y = new double[22];
+    private static final double[] AFTERGLOW_NODE_Z = new double[22];
+
     /** 轨迹层统一入口：世界轴主束 + 弹道局部坐标下的弧带与星链。 */
     public static void render(WindArrowRenderState state, WindArrowRenderContext context) {
         PoseStack poseStack = context.poseStack;
@@ -130,10 +139,10 @@ public final class WindArrowTrailRenderer {
         double orgY = originWorld.y;
         double orgZ = originWorld.z;
 
-        // 中心线：中心点 + S 形偏移，全部标量存储，避免逐段 Vec3 短命对象。
-        double[] centerX = new double[segments + 1];
-        double[] centerY = new double[segments + 1];
-        double[] centerZ = new double[segments + 1];
+        // 中心线：中心点 + S 形偏移，全部标量存储在共享缓冲，避免逐段 Vec3 短命对象。
+        double[] centerX = RIBBON_CENTER_X;
+        double[] centerY = RIBBON_CENTER_Y;
+        double[] centerZ = RIBBON_CENTER_Z;
         double prevSideX = 0.0;
         double prevSideY = 0.0;
         double prevSideZ = 0.0;
@@ -530,7 +539,9 @@ public final class WindArrowTrailRenderer {
         float revealResidual = Mth.clamp((age - 1.25f) / 1.55f, 0.0f, 1.0f);
         float alpha = trailAlpha * (0.12f + 0.48f * revealResidual);
         int nodeCount = Mth.clamp((int) Math.ceil(length / 0.92f) + 1, 8, 22);
-        Vec3[] points = new Vec3[nodeCount];
+        double[] nodeX = AFTERGLOW_NODE_X;
+        double[] nodeY = AFTERGLOW_NODE_Y;
+        double[] nodeZ = AFTERGLOW_NODE_Z;
 
         for (int i = 0; i < nodeCount; i++) {
             float t = i / (float) (nodeCount - 1);
@@ -538,16 +549,20 @@ public final class WindArrowTrailRenderer {
             float phase = t * 5.8f - age * 0.17f;
             float x = 0.085f * (float) Math.sin(phase) + 0.032f * (float) Math.sin(phase * 2.8f + 0.7f);
             float z = 0.092f * (float) Math.cos(phase * 1.13f) + 0.027f * (float) Math.sin(phase * 2.1f);
-            points[i] = new Vec3(x, y, z);
+            nodeX[i] = x;
+            nodeY[i] = y;
+            nodeZ[i] = z;
         }
 
         // 点线链段不完全接触节点，避免出现一根连续的机械电线。
         for (int i = 0; i < nodeCount - 1; i++) {
-            Vec3 delta = points[i + 1].subtract(points[i]);
-            Vec3 start = points[i].add(delta.scale(0.18));
-            Vec3 end = points[i + 1].subtract(delta.scale(0.24));
+            double deltaX = nodeX[i + 1] - nodeX[i];
+            double deltaY = nodeY[i + 1] - nodeY[i];
+            double deltaZ = nodeZ[i + 1] - nodeZ[i];
             float segmentAlpha = alpha * (i % 3 == 0 ? 0.76f : 0.48f);
-            drawTubeSegment(poseStack, glow, start, end,
+            drawTubeSegment(poseStack, glow,
+                nodeX[i] + deltaX * 0.18, nodeY[i] + deltaY * 0.18, nodeZ[i] + deltaZ * 0.18,
+                nodeX[i + 1] - deltaX * 0.24, nodeY[i + 1] - deltaY * 0.24, nodeZ[i + 1] - deltaZ * 0.24,
                 i % 3 == 0 ? 0.0032f : 0.0021f,
                 0.18f, 0.48f, 1.0f, segmentAlpha, 4);
         }
@@ -557,13 +572,15 @@ public final class WindArrowTrailRenderer {
             float t = i / (float) (nodeCount - 1);
             float pulse = 0.34f + 0.66f * (0.5f + 0.5f * Mth.sin(age * 1.1f + i * 1.73f));
             float size = (i % 4 == 2 ? 0.047f : 0.025f) * (0.8f + 0.2f * pulse);
-            Vec3 p = points[i];
+            float x = (float) nodeX[i];
+            float y = (float) nodeY[i];
+            float z = (float) nodeZ[i];
             if (i % 3 == 0) {
-                WindArrowRenderUtil.drawSprite(poseStack, sprites, (float) p.x, (float) p.y, (float) p.z,
+                WindArrowRenderUtil.drawSprite(poseStack, sprites, x, y, z,
                     size, size * 1.08f, 2, age * 11.0f + i * 23.0f,
                     0.61f, 0.82f, 1.0f, alpha * 0.52f * pulse);
             } else {
-                WindArrowRenderUtil.drawSprite(poseStack, sprites, (float) p.x, (float) p.y, (float) p.z,
+                WindArrowRenderUtil.drawSprite(poseStack, sprites, x, y, z,
                     size * 0.52f, size * 0.52f, 0, age * 9.0f + i * 17.0f,
                     0.50f, 0.72f, 1.0f, alpha * 0.42f * pulse);
             }
@@ -575,41 +592,95 @@ public final class WindArrowTrailRenderer {
         return t * t * (3.0f - 2.0f * t);
     }
 
-    /** plane=0: normal Y; plane=1: normal X; plane=2: normal Z. */
+    /** 标量化管段：与原 Vec3 实现同序，保留 1.0e-8 短路与 1.0E-4 零向量语义。 */
     private static void drawTubeSegment(PoseStack poseStack, VertexConsumer consumer,
-                                        Vec3 start, Vec3 end, float radius,
-                                        float red, float green, float blue, float alpha,
+                                        double startX, double startY, double startZ,
+                                        double endX, double endY, double endZ,
+                                        float radius, float red, float green, float blue, float alpha,
                                         int segments) {
-        Vec3 delta = end.subtract(start);
-        if (delta.lengthSqr() < 1.0e-8) {
+        double dirX = endX - startX;
+        double dirY = endY - startY;
+        double dirZ = endZ - startZ;
+        double dirLenSqr = dirX * dirX + dirY * dirY + dirZ * dirZ;
+        if (dirLenSqr < 1.0e-8) {
             return;
         }
-        Vec3 direction = delta.normalize();
-        Vec3 reference = Math.abs(direction.y) < 0.9
-            ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
-        Vec3 right = direction.cross(reference).normalize();
-        Vec3 up = direction.cross(right).normalize();
+        double dirLen = Math.sqrt(dirLenSqr);
+        if (dirLen >= 1.0E-4) {
+            dirX /= dirLen;
+            dirY /= dirLen;
+            dirZ /= dirLen;
+        } else {
+            dirX = 0.0;
+            dirY = 0.0;
+            dirZ = 0.0;
+        }
+        double refX = Math.abs(dirY) < 0.9 ? 0.0 : 1.0;
+        double refY = Math.abs(dirY) < 0.9 ? 1.0 : 0.0;
+        double refZ = 0.0;
+        double rightX = dirY * refZ - dirZ * refY;
+        double rightY = dirZ * refX - dirX * refZ;
+        double rightZ = dirX * refY - dirY * refX;
+        double rightLen = Math.sqrt(rightX * rightX + rightY * rightY + rightZ * rightZ);
+        if (rightLen >= 1.0E-4) {
+            rightX /= rightLen;
+            rightY /= rightLen;
+            rightZ /= rightLen;
+        } else {
+            rightX = 0.0;
+            rightY = 0.0;
+            rightZ = 0.0;
+        }
+        double upX = dirY * rightZ - dirZ * rightY;
+        double upY = dirZ * rightX - dirX * rightZ;
+        double upZ = dirX * rightY - dirY * rightX;
+        double upLen = Math.sqrt(upX * upX + upY * upY + upZ * upZ);
+        if (upLen >= 1.0E-4) {
+            upX /= upLen;
+            upY /= upLen;
+            upZ /= upLen;
+        } else {
+            upX = 0.0;
+            upY = 0.0;
+            upZ = 0.0;
+        }
         PoseStack.Pose pose = poseStack.last();
 
         for (int i = 0; i < segments; i++) {
             double a0 = Math.PI * 2.0 * i / segments;
             double a1 = Math.PI * 2.0 * (i + 1) / segments;
-            Vec3 o0 = right.scale(Math.cos(a0) * radius).add(up.scale(Math.sin(a0) * radius));
-            Vec3 o1 = right.scale(Math.cos(a1) * radius).add(up.scale(Math.sin(a1) * radius));
-            Vec3 p0 = start.add(o0);
-            Vec3 p1 = start.add(o1);
-            Vec3 p2 = end.add(o1);
-            Vec3 p3 = end.add(o0);
+            double c0 = Math.cos(a0) * radius;
+            double s0 = Math.sin(a0) * radius;
+            double c1 = Math.cos(a1) * radius;
+            double s1 = Math.sin(a1) * radius;
+            double o0X = rightX * c0 + upX * s0;
+            double o0Y = rightY * c0 + upY * s0;
+            double o0Z = rightZ * c0 + upZ * s0;
+            double o1X = rightX * c1 + upX * s1;
+            double o1Y = rightY * c1 + upY * s1;
+            double o1Z = rightZ * c1 + upZ * s1;
+            double p0X = startX + o0X;
+            double p0Y = startY + o0Y;
+            double p0Z = startZ + o0Z;
+            double p1X = startX + o1X;
+            double p1Y = startY + o1Y;
+            double p1Z = startZ + o1Z;
+            double p2X = endX + o1X;
+            double p2Y = endY + o1Y;
+            double p2Z = endZ + o1Z;
+            double p3X = endX + o0X;
+            double p3Y = endY + o0Y;
+            double p3Z = endZ + o0Z;
             float u0 = (float) i / segments;
             float u1 = (float) (i + 1) / segments;
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p0.x, (float) p0.y, (float) p0.z, u0, 0,
-                red, green, blue, alpha, (float) (o0.x / radius), (float) (o0.y / radius), (float) (o0.z / radius));
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p1.x, (float) p1.y, (float) p1.z, u1, 0,
-                red, green, blue, alpha, (float) (o1.x / radius), (float) (o1.y / radius), (float) (o1.z / radius));
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p2.x, (float) p2.y, (float) p2.z, u1, 1,
-                red, green, blue, alpha, (float) (o1.x / radius), (float) (o1.y / radius), (float) (o1.z / radius));
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p3.x, (float) p3.y, (float) p3.z, u0, 1,
-                red, green, blue, alpha, (float) (o0.x / radius), (float) (o0.y / radius), (float) (o0.z / radius));
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p0X, (float) p0Y, (float) p0Z, u0, 0,
+                red, green, blue, alpha, (float) (o0X / radius), (float) (o0Y / radius), (float) (o0Z / radius));
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p1X, (float) p1Y, (float) p1Z, u1, 0,
+                red, green, blue, alpha, (float) (o1X / radius), (float) (o1Y / radius), (float) (o1Z / radius));
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p2X, (float) p2Y, (float) p2Z, u1, 1,
+                red, green, blue, alpha, (float) (o1X / radius), (float) (o1Y / radius), (float) (o1Z / radius));
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) p3X, (float) p3Y, (float) p3Z, u0, 1,
+                red, green, blue, alpha, (float) (o0X / radius), (float) (o0Y / radius), (float) (o0Z / radius));
         }
     }
 }
