@@ -27,12 +27,24 @@ final class LizhiYanBlastExecutor {
     static void fire(
             LizhiYanEntity sword,
             LivingEntity owner,
-            Vec3 startPos,
-            Vec3 lookDir,
             float range,
             float[] tint,
             float damage,
-            @Nullable Entity currentTarget) {
+            @Nullable Entity currentTarget,
+            Vec3 fallbackDirection) {
+        Vec3 lookDir;
+        if (currentTarget != null && currentTarget.isAlive()) {
+            Vec3 targetCenter = currentTarget.position().add(0, currentTarget.getBbHeight() / 2, 0);
+            lookDir = targetCenter.subtract(sword.position()).normalize();
+        } else {
+            lookDir = fallbackDirection;
+            if (lookDir.lengthSqr() < 0.0001) {
+                lookDir = Vec3.directionFromRotation(sword.getXRot(), sword.getYRot());
+            }
+        }
+
+        Vec3 startPos = sword.position().add(0, 0.3, 0);
+        if (lookDir.lengthSqr() > 1e-6) sword.faceDirectionForBlast(lookDir);
         Vec3 endPos = startPos.add(lookDir.scale(range));
         var blockHit = sword.level().clip(new ClipContext(
                 startPos, endPos, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, sword));
