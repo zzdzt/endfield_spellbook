@@ -611,7 +611,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
      * 协同光束屏障（严格版）：所有剑 phase 在 blast 序列 + 各自 closeTo 自己的锁定站位，
      * 才一起齐射。仅靠 phase 序列不够——phase 进入早但飞行未到位就齐射会出现"还在编队位就开枪"。
      */
-    private boolean allAtBlastPositions(LivingEntity owner) {
+    boolean allAtBlastPositions(LivingEntity owner) {
         for (LizhiYanEntity s : getSiblingSwords()) {
             if (!s.swordReadyAndAtPos(owner)) return false;
         }
