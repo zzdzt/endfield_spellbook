@@ -22,11 +22,18 @@ public final class WindArrowRenderState {
     public final Vec3 originWorld;
     public final Vec3 direction;
     public final Vec3 cameraWorld;
+    /** 实体当前视觉样式（STYLE_WIND_ARROW_*），命中通道据此选择爆闪贴图。 */
+    public final int visualStyle;
+    /** 弹道局部坐标系的抬升量与朝向：由实体包围盒半高与 yaw/pitch 构成。 */
+    public final float bodyHalfHeight;
+    public final float yawDegrees;
+    public final float pitchDegrees;
 
     private WindArrowRenderState(float age, float flightProgress, float visibleLength,
                                  float activeTrailLength, float beamAlpha, float arcAlpha,
                                  float trailAlpha, Vec3 originWorld, Vec3 direction,
-                                 Vec3 cameraWorld) {
+                                 Vec3 cameraWorld, int visualStyle, float bodyHalfHeight,
+                                 float yawDegrees, float pitchDegrees) {
         this.age = age;
         this.flightProgress = flightProgress;
         this.visibleLength = visibleLength;
@@ -37,6 +44,10 @@ public final class WindArrowRenderState {
         this.originWorld = originWorld;
         this.direction = direction;
         this.cameraWorld = cameraWorld;
+        this.visualStyle = visualStyle;
+        this.bodyHalfHeight = bodyHalfHeight;
+        this.yawDegrees = yawDegrees;
+        this.pitchDegrees = pitchDegrees;
     }
 
     public static WindArrowRenderState create(LizhiYanBlastVisualEntity entity, float partialTicks) {
@@ -66,7 +77,10 @@ public final class WindArrowRenderState {
         Vec3 cameraWorld = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
 
         return new WindArrowRenderState(age, flightProgress, visibleLength, activeTrailLength,
-            beamAlpha, arcAlpha, trailAlpha, originWorld, direction, cameraWorld);
+            beamAlpha, arcAlpha, trailAlpha, originWorld, direction, cameraWorld,
+            entity.getVisualStyle(),
+            (float) entity.getBoundingBox().getYsize() * 0.5f,
+            entity.getYRot(), entity.getXRot());
     }
 
     /** 主束与拖尾完全淡出后整帧可跳过。 */

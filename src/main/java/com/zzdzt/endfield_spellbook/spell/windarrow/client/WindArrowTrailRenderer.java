@@ -10,19 +10,30 @@ import net.minecraft.world.phys.Vec3;
 /**
  * 风矢移动轨迹层：主束 billboard 丝带、卷风弧带、星芒碎光与星链余痕。
  *
- * <p>renderMainRibbon 在世界轴坐标生成相机朝向丝带；其余三个通道要求调用方
- * 已进入弹道局部坐标系（由 {@link WindArrowVfxRenderer} 的编排统一推拉 pose）。
+ * <p>主束在世界轴坐标生成相机朝向丝带；卷风弧带与星链自行进入弹道局部坐标系绘制。
  */
 public final class WindArrowTrailRenderer {
 
     private WindArrowTrailRenderer() {
     }
 
+    /** 轨迹层统一入口：世界轴主束 + 弹道局部坐标下的弧带与星链。 */
+    public static void render(WindArrowRenderState state, PoseStack poseStack,
+                              MultiBufferSource bufferSource) {
+        renderMainRibbon(state, poseStack, bufferSource);
+
+        WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);
+        renderSwirlTrail(state, poseStack, bufferSource);
+        renderStarGlint(state, poseStack, bufferSource);
+        renderAfterglow(state, poseStack, bufferSource);
+        poseStack.popPose();
+    }
+
     /**
      * 主束四层 billboard 丝带：外晕、主带、能量芯与 needle 白芯，外加贯穿全程的星座带。
      */
-    public static void renderMainRibbon(WindArrowRenderState state, PoseStack poseStack,
-                                        MultiBufferSource bufferSource) {
+    private static void renderMainRibbon(WindArrowRenderState state, PoseStack poseStack,
+                                         MultiBufferSource bufferSource) {
         VertexConsumer beam = bufferSource.getBuffer(WindArrowRenderTypes.BEAM);
         // Layer 1: 宽而低亮的蓝色外晕，负责让轨迹在复杂背景上可读。
         renderWindArrowBillboardRibbon(poseStack, beam, state.originWorld, state.direction,
@@ -51,14 +62,14 @@ public final class WindArrowTrailRenderer {
     }
 
     /** 银白翻卷弧带：swirl 贴图沿四组开口椭圆弧铺展。 */
-    public static void renderSwirlTrail(WindArrowRenderState state, PoseStack poseStack,
+    private static void renderSwirlTrail(WindArrowRenderState state, PoseStack poseStack,
                                         MultiBufferSource bufferSource) {
         VertexConsumer ring = bufferSource.getBuffer(WindArrowRenderTypes.RING);
         renderWindArrowRibbonArcs(poseStack, ring, state.visibleLength, state.age, state.arcAlpha);
     }
 
     /** 星芒、锐利闪光与斜置晶片。 */
-    public static void renderStarGlint(WindArrowRenderState state, PoseStack poseStack,
+    private static void renderStarGlint(WindArrowRenderState state, PoseStack poseStack,
                                        MultiBufferSource bufferSource) {
         VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
         VertexConsumer shards = bufferSource.getBuffer(WindArrowRenderTypes.SHARDS);
@@ -67,7 +78,7 @@ public final class WindArrowTrailRenderer {
     }
 
     /** 主束退场后的星点连接余痕。 */
-    public static void renderAfterglow(WindArrowRenderState state, PoseStack poseStack,
+    private static void renderAfterglow(WindArrowRenderState state, PoseStack poseStack,
                                        MultiBufferSource bufferSource) {
         VertexConsumer glow = bufferSource.getBuffer(WindArrowRenderTypes.GLOW);
         VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);

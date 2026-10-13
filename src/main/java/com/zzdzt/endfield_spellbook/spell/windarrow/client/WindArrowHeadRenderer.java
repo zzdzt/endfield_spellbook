@@ -15,8 +15,9 @@ public final class WindArrowHeadRenderer {
     private WindArrowHeadRenderer() {
     }
 
-    public static void renderHead(WindArrowRenderState state, PoseStack poseStack,
-                                  MultiBufferSource bufferSource) {
+    public static void render(WindArrowRenderState state, PoseStack poseStack,
+                              MultiBufferSource bufferSource) {
+        WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);
         // 箭矢前锋：几何楔形保持体积感，专用晶体贴图补足白芯、切面和锐利边缘。
         float tipY = state.visibleLength;
         VertexConsumer glow = bufferSource.getBuffer(WindArrowRenderTypes.GLOW);
@@ -28,6 +29,7 @@ public final class WindArrowHeadRenderer {
         WindArrowRenderUtil.drawSprite(poseStack, sprites, 0.0f, tipY, 0.008f,
             0.034f, 0.047f, 2, state.age * 21.0f,
             0.96f, 0.99f, 1.0f, state.beamAlpha * 0.48f);
+        poseStack.popPose();
     }
 
     /**

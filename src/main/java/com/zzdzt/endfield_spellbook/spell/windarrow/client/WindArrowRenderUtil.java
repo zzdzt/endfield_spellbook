@@ -15,6 +15,14 @@ public final class WindArrowRenderUtil {
     private WindArrowRenderUtil() {
     }
 
+    /** 进入弹道局部坐标系：抬升实体包围盒半高并按弹道 yaw/pitch 旋转，配对 popPose 使用。 */
+    static void pushTrajectoryPose(PoseStack poseStack, WindArrowRenderState state) {
+        poseStack.pushPose();
+        poseStack.translate(0, state.bodyHalfHeight, 0);
+        poseStack.mulPose(Axis.YP.rotationDegrees(-state.yawDegrees - 180.0F));
+        poseStack.mulPose(Axis.XP.rotationDegrees(-state.pitchDegrees - 90.0F));
+    }
+
     /** 沿弹道轴放置一张横向旋转的星芒/碎片贴图。 */
     static void drawSprite(PoseStack poseStack, VertexConsumer consumer,
                            float cx, float cy, float cz,

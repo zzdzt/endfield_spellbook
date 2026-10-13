@@ -19,30 +19,21 @@ public final class WindArrowImpactRenderer {
     private WindArrowImpactRenderer() {
     }
 
-    public static void renderImpact(WindArrowRenderState state, LizhiYanBlastVisualEntity entity,
-                                    PoseStack poseStack, MultiBufferSource bufferSource) {
-        int style = entity.getVisualStyle();
+    public static void render(WindArrowRenderState state, PoseStack poseStack,
+                              MultiBufferSource bufferSource) {
         if (state.age < IMPACT_START_AGE) {
             return;
         }
 
-        if (style == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT) {
-            renderHit(state, entity, poseStack, bufferSource);
-        } else if (style == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_FINAL_HIT) {
-            renderFinalHit(state, entity, poseStack, bufferSource);
+        WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);
+        if (state.visualStyle == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT) {
+            drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT),
+                0, state.visibleLength, 0, state.age - IMPACT_START_AGE, false);
+        } else if (state.visualStyle == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_FINAL_HIT) {
+            drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT_FINAL),
+                0, state.visibleLength, 0, state.age - IMPACT_START_AGE, true);
         }
-    }
-
-    private static void renderHit(WindArrowRenderState state, LizhiYanBlastVisualEntity entity,
-                                  PoseStack poseStack, MultiBufferSource bufferSource) {
-        drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT),
-            0, entity.distance, 0, state.age - IMPACT_START_AGE, false);
-    }
-
-    private static void renderFinalHit(WindArrowRenderState state, LizhiYanBlastVisualEntity entity,
-                                       PoseStack poseStack, MultiBufferSource bufferSource) {
-        drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT_FINAL),
-            0, entity.distance, 0, state.age - IMPACT_START_AGE, true);
+        poseStack.popPose();
     }
 
     /**
