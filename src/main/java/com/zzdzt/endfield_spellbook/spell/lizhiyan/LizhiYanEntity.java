@@ -1,20 +1,14 @@
 package com.zzdzt.endfield_spellbook.spell.lizhiyan;
 
-import com.zzdzt.endfield_spellbook.registry.EntityRegistry;
-import com.zzdzt.endfield_spellbook.registry.SpellRegistry;
 import com.zzdzt.endfield_spellbook.entity.CasterOwnedEntity;
 import io.redspace.ironsspellbooks.api.magic.MagicData;
 import io.redspace.ironsspellbooks.capabilities.magic.SummonManager;
-import io.redspace.ironsspellbooks.damage.DamageSources;
-import io.redspace.ironsspellbooks.damage.SpellDamageSource;
 import io.redspace.ironsspellbooks.entity.mobs.AntiMagicSusceptible;
 import io.redspace.ironsspellbooks.entity.mobs.IMagicSummon;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -45,41 +39,17 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     enum Phase { IDLE, CHARGE, STAB, BLAST, BLAST_DELAY, SPIN, COOLDOWN, BLAST_READY }
 
-    //排列配置
-    private static final Vec3[] FORMATION_OFFSETS = {
-        new Vec3(-2.0, 1.2, 0.0),
-        new Vec3(2.0, 1.2, 0.0),
-        new Vec3(0.0, 1.8, -1.5)
-    };
-
-    private static final Vec3[] DEFAULT_AIM = {
-        new Vec3(-0.5, 0, 0.8).normalize(),
-        new Vec3(0.5, 0, 0.8).normalize(),
-        new Vec3(0.0, 0.1, 1.0).normalize()
-    };
-
     private static final float[][] BLAST_TINTS = {
         {0.22f, 0.71f, 0.97f},
         {0.22f, 0.71f, 0.97f},
         {0.22f, 0.71f, 0.97f}
     };
 
-    //性能优化常量
-    private static final float FORMATION_LERP = 0.12f;
-    private static final float IDLE_SWAY_AMP = 0.03f;
-    private static final float IDLE_SWAY_FREQ = 0.02f;
-    // 方向变化阈值：小于此值时跳过三角函数
-    private static final double AIM_DIR_THRESHOLD_SQ = 0.001;
-    // 位置更新降频：每 2 tick 计算一次
-    private static final int POSITION_UPDATE_INTERVAL = 2;
-
     //攻击时序
     static final int CHARGE_TICKS_STAB = 10;
     static final int COOLDOWN_TICKS_STAB = 10;
     static final int COOLDOWN_TICKS_BLAST = 40;
-    private static final float[] STAB_DAMAGE_MULTIPLIERS = {1.0f, 1.3f};
     private static final float BLAST_DAMAGE_MULTIPLIER = 3.0f;
-    private static final int RETURN_TICKS = 10;
     // 冲刺硬超时兜底（tick）：目标乱跑追不上时放弃穿刺，防止相位机卡死
     static final int STAB_MAX_TICKS = 60;
     // 协同光束等待超时（tick）：三剑都完成前两段穿刺后，等它们全部就绪再齐射；超时强制放行
@@ -89,9 +59,6 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     //旋转动作时序
     private static final int DEFAULT_SPIN_TICKS = 50;
-    private static final float SPIN_RADIUS = 1.5f;
-    private static final float SPIN_HEIGHT = 1.2f;
-    private static final float SPIN_CENTER_DISTANCE = 2.0f;
     static final int BLAST_TO_SPIN_DELAY = 4;
     private int spinTicks = DEFAULT_SPIN_TICKS;
 
@@ -106,27 +73,18 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     private final LizhiYanTargeting targeting = new LizhiYanTargeting(this);
     private final LizhiYanMovementController movement = new LizhiYanMovementController(this);
     private final LizhiYanFormationController formation = new LizhiYanFormationController(this);
+    private final LizhiYanPresentationController presentation = new LizhiYanPresentationController(this);
     private final LizhiYanAttackController attackController = new LizhiYanAttackController(this);
 
 
-    // 位置缓存
-    private Vec3 formationPos = Vec3.ZERO;
-    private Vec3 lastOwnerPos = Vec3.ZERO;
-    private float lastOwnerYaw = 0f;
-    private double lastCosYaw = 1.0, lastSinYaw = 0.0;
-    private int lastFormationComputeTick = -1;
-
     // 穿刺子状态与计时由专用控制器持有，实体只负责主攻击阶段与生命周期。
     private final LizhiYanThrustController thrustController = new LizhiYanThrustController(this);
-
-    private int returnTick = 0;
 
     // 齐射站位的实际移动由实体执行，站位锁定状态由攻击控制器持有。
 
     // 方向缓存
     private float currentYaw = 0f;
     private float currentPitch = 0f;
-    private Vec3 lastAimDir = Vec3.ZERO;
 
     public LizhiYanEntity(EntityType<?> entityType, Level level) {
         super(entityType, level);
@@ -142,12 +100,12 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         this.slotIndex = slot;
         this.baseDamage = 6.0f;
 
-        Vec3 aim = DEFAULT_AIM[slot];
+        Vec3 aim = LizhiYanFormationController.defaultAim(slot);
         this.currentYaw = (float) Math.toDegrees(Math.atan2(-aim.x, aim.z));
         this.currentPitch = (float) -Math.toDegrees(
             Math.atan2(aim.y, Math.sqrt(aim.x*aim.x + aim.z*aim.z)));
 
-        setInitialPosition(owner);
+        formation.initializePosition(owner);
     }
 
     @Override public void onUnSummon() {
@@ -182,6 +140,13 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     void incrementBlastReadyHold() { attackController.incrementBlastReadyHold(); }
     void resetBlastReadyHold() { attackController.resetBlastReadyHold(); }
     int getSpinTicksForController() { return spinTicks; }
+    float getBaseDamage() { return baseDamage; }
+    float currentAimYaw() { return currentYaw; }
+    float currentAimPitch() { return currentPitch; }
+    void refreshAimRotationHistory() { setYRot(currentYaw); setXRot(currentPitch); yRotO=currentYaw; xRotO=currentPitch; }
+    void applyAimRotation(float yaw,float pitch) { currentYaw=yaw; currentPitch=pitch; setYRot(yaw); setXRot(pitch); yRotO=yaw; xRotO=pitch; }
+    boolean isFirstTickForPresentation() { return firstTick; }
+    void updateAimDirection(LivingEntity owner) { formation.updateAimDirection(owner); }
     void setChargeScaleSynced(float value) { entityData.set(CHARGE_SCALE, value); }
     void resetThrustDamageState() { thrustController.resetDamageState(); }
     void forceFinishThrust() { thrustController.forceFinish(); }
@@ -257,148 +222,23 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     private void tickClient() {
-        if (firstTick) spawnSummonParticles();
-
-        Phase currentPhase = Phase.values()[entityData.get(ATTACK_PHASE)];
-        float chargeScale = entityData.get(CHARGE_SCALE);
-        boolean isThrusting = entityData.get(IS_THRUSTING);
-
-        // 蓄力粒子环
-        if (currentPhase == Phase.CHARGE && tickCount % 5 == 0) {
-            float angle = tickCount * 0.3f + slotIndex * 2.1f;
-            for (int i = 0; i < 2; i++) {
-                float a = angle + (float) (Math.PI * i);
-                double px = getX() + Math.cos(a) * chargeScale * 0.4;
-                double pz = getZ() + Math.sin(a) * chargeScale * 0.4;
-                level().addParticle(ParticleTypes.ENCHANT, px, getY(), pz, 0, 0.03, 0);
-            }
-        }
-
-        // 旋转粒子
-        if (currentPhase == Phase.SPIN && tickCount % 3 == 0) {
-            level().addParticle(ParticleTypes.ENCHANT,
-                getX() + (random.nextDouble()-0.5)*0.3,
-                getY() + (random.nextDouble()-0.5)*0.3,
-                getZ() + (random.nextDouble()-0.5)*0.3,
-                (random.nextDouble()-0.5)*0.1,
-                (random.nextDouble()-0.5)*0.1,
-                (random.nextDouble()-0.5)*0.1);
-        }
-
-        // 冲刺拖尾
-        if (isThrusting && tickCount % 3 == 0) {
-            level().addParticle(ParticleTypes.CRIT,
-                getX() + (random.nextDouble()-0.5)*0.2,
-                getY() + (random.nextDouble()-0.5)*0.2,
-                getZ() + (random.nextDouble()-0.5)*0.2,
-                0, 0, 0);
-        }
-
-        // 常驻粒子
-        if (tickCount % 10 == 0) {
-            level().addParticle(ParticleTypes.ENCHANT, getX(), getY(), getZ(), 0, 0.03, 0);
-        }
+        presentation.tickClient(isFirstTickForPresentation(),Phase.values()[entityData.get(ATTACK_PHASE)],entityData.get(CHARGE_SCALE),entityData.get(IS_THRUSTING));
     }
 
     private void tickServer() {
         LivingEntity owner = getOwner();
         if (owner == null || !owner.isAlive()) { onUnSummon(); return; }
 
-        if (returnTick > 0) { updateReturnToFormation(owner); syncStateToClient(); return; }
+        if (formation.isReturning()) { formation.updateReturnToFormation(owner); syncStateToClient(); return; }
         if (thrustController.isActive()) { thrustController.tick(); }
-        else if (getAttackPhaseState() == Phase.SPIN) { updateSpin(owner); }
+        else if (getAttackPhaseState() == Phase.SPIN) { formation.updateSpin(owner,getAttackPhaseTick(),spinTicks); }
         else if (getAttackPhaseState() == Phase.BLAST_READY) { formation.updateBlastReadyPosition(owner); }
         else if (getAttackPhaseState() == Phase.BLAST || getAttackPhaseState() == Phase.BLAST_DELAY) { formation.holdBlastPosition(owner); }
-        else { updateFormationPosition(owner); }
+        else { formation.updateFormationPosition(owner); }
 
         targeting.update(owner, range);
         attackController.tick(owner);
         syncStateToClient();
-    }
-
-    // 位置
-    private void updateFormationPosition(LivingEntity owner) {
-        // 缓存 owner 的 yaw 三角函数，避免每 tick 重复计算
-        float ownerYaw = owner.getYRot();
-        if (ownerYaw != lastOwnerYaw || lastOwnerPos.distanceToSqr(owner.position()) > 0.01) {
-            lastOwnerYaw = ownerYaw;
-            lastOwnerPos = owner.position();
-            double yawRad = ownerYaw * 0.0174533f;
-            lastCosYaw = Math.cos(yawRad);
-            lastSinYaw = Math.sin(yawRad);
-        }
-
-        // 每 2 tick 计算一次目标位置，中间用 lerp 插值
-        Vec3 targetPos;
-        if (tickCount % POSITION_UPDATE_INTERVAL == 0 || lastFormationComputeTick < 0) {
-            // 完整计算
-            Vec3 offset = FORMATION_OFFSETS[slotIndex];
-            double rx = offset.x * lastCosYaw - offset.z * lastSinYaw;
-            double rz = offset.x * lastSinYaw + offset.z * lastCosYaw;
-            targetPos = owner.position().add(rx, offset.y, rz);
-
-            double swayY = Math.sin(tickCount * IDLE_SWAY_FREQ + slotIndex * 2.1) * IDLE_SWAY_AMP;
-            targetPos = targetPos.add(0, swayY, 0);
-
-            lastFormationComputeTick = tickCount;
-        } else {
-            // 使用上次计算的位置
-            Vec3 offset = FORMATION_OFFSETS[slotIndex];
-            double rx = offset.x * lastCosYaw - offset.z * lastSinYaw;
-            double rz = offset.x * lastSinYaw + offset.z * lastCosYaw;
-            targetPos = owner.position().add(rx, offset.y, rz);
-            double swayY = Math.sin(tickCount * IDLE_SWAY_FREQ + slotIndex * 2.1) * IDLE_SWAY_AMP;
-            targetPos = targetPos.add(0, swayY, 0);
-        }
-
-        Vec3 newPos = position().lerp(targetPos, FORMATION_LERP);
-        setPos(newPos.x, newPos.y, newPos.z);
-        hasImpulse = true;
-        formationPos = newPos;
-        updateAimDirection(owner);
-    }
-
-    //瞄准方向
-    void updateAimDirection(LivingEntity owner) {
-        Entity targetToAim = targeting.getCurrentTarget() != null ? targeting.getCurrentTarget() : targeting.getPendingTarget();
-
-        Vec3 aimDir;
-        if (targetToAim != null && targetToAim.isAlive()) {
-            Vec3 tc = targetToAim.position().add(0, targetToAim.getBbHeight()/2, 0);
-            aimDir = tc.subtract(position()).normalize();
-        } else {
-            Vec3 def = DEFAULT_AIM[slotIndex];
-            double rx = def.x * lastCosYaw - def.z * lastSinYaw;
-            double rz = def.x * lastSinYaw + def.z * lastCosYaw;
-            aimDir = new Vec3(rx, def.y, rz).normalize();
-        }
-
-        // 方向变化很小时跳过三角函数计算
-        if (aimDir.distanceToSqr(lastAimDir) < AIM_DIR_THRESHOLD_SQ) {
-            // 使用缓存的 yaw/pitch，只更新 entity 的 rotation
-            setYRot(currentYaw);
-            setXRot(currentPitch);
-            yRotO = currentYaw;
-            xRotO = currentPitch;
-            return;
-        }
-        lastAimDir = aimDir;
-
-        float targetYaw = (float) Math.toDegrees(Math.atan2(-aimDir.x, aimDir.z));
-        float targetPitch = (float) -Math.toDegrees(Math.atan2(aimDir.y, Math.sqrt(aimDir.x*aimDir.x + aimDir.z*aimDir.z)));
-        currentYaw = lerpAngle(currentYaw, targetYaw, 0.15f);
-        currentPitch = lerpAngle(currentPitch, targetPitch, 0.15f);
-        setYRot(currentYaw);
-        setXRot(currentPitch);
-        yRotO = currentYaw;
-        xRotO = currentPitch;
-    }
-
-    private float lerpAngle(float from, float to, float t) {
-        float diff = to - from;
-        while (diff > 180) diff -= 360;
-        while (diff < -180) diff += 360;
-        return from + diff * t;
     }
 
     // 攻击状态机
@@ -425,9 +265,9 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
             setAttackPhaseState(Phase.BLAST_READY);
             setAttackPhaseTick(0);
             resetBlastReadyHold();
-            returnTick = 0;
+            formation.cancelReturn();
         } else {
-            returnTick = RETURN_TICKS;
+            formation.beginReturn();
             setAttackPhaseState(Phase.COOLDOWN);
             setAttackPhaseTick(0);
         }
@@ -447,22 +287,6 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     void playThrustStartSound() {
         level().playSound(null, getX(), getY(), getZ(),
             SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.3f, 1.5f);
-    }
-
-    private void updateReturnToFormation(LivingEntity owner) {
-        // 编队位（含 idle 摆动），与 updateFormationPosition 同款缓存三角函数
-        Vec3 offset = FORMATION_OFFSETS[slotIndex];
-        double rx = offset.x * lastCosYaw - offset.z * lastSinYaw;
-        double rz = offset.x * lastSinYaw + offset.z * lastCosYaw;
-        Vec3 formationTarget = owner.position().add(rx, offset.y, rz);
-        double swayY = Math.sin(tickCount * IDLE_SWAY_FREQ + slotIndex * 2.1) * IDLE_SWAY_AMP;
-        formationTarget = formationTarget.add(0, swayY, 0);
-
-        // 阻尼追踪回巢（参照 YujianCraft tickReturnApproach）：柔顺入位，剑尖朝编队位
-        flyToward(formationTarget, 0.22, 0.82, formationTarget.subtract(position()).normalize());
-        if (closeTo(formationTarget, 0.25) || --returnTick <= 0) {
-            returnTick = 0;
-        }
     }
 
     // 阻尼运动与朝向计算委托给专用控制器；攻击相位仍由实体持有。
@@ -492,57 +316,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         return movement.closeTo(point, radius);
     }
 
-    private void updateSpin(LivingEntity owner) {
-        double progress = getAttackPhaseTick() / (double) spinTicks;
-
-        double baseAngle = slotIndex * (2 * Math.PI / 3);
-        double spinAngle = baseAngle - progress * 2 * Math.PI;
-
-        float yawRad = owner.getYRot() * 0.0174533f;
-
-        double behindX = Math.sin(yawRad) * SPIN_CENTER_DISTANCE;
-        double behindZ = -Math.cos(yawRad) * SPIN_CENTER_DISTANCE;
-
-        double centerX = owner.getX() + behindX;
-        double centerY = owner.getY() + SPIN_HEIGHT;
-        double centerZ = owner.getZ() + behindZ;
-
-        double offsetRight = Math.cos(spinAngle) * SPIN_RADIUS;
-        double offsetUp = Math.sin(spinAngle) * SPIN_RADIUS;
-
-        double rightX = Math.cos(yawRad);
-        double rightZ = Math.sin(yawRad);
-
-        double x = centerX + offsetRight * rightX;
-        double y = centerY + offsetUp;
-        double z = centerZ + offsetRight * rightZ;
-
-        Vec3 targetPos = new Vec3(x, y, z);
-
-        Vec3 newPos = position().lerp(targetPos, 0.2f);
-        setPos(newPos.x, newPos.y, newPos.z);
-        hasImpulse = true;
-
-        Vec3 center = new Vec3(centerX, centerY, centerZ);
-        Vec3 fromCenter = newPos.subtract(center).normalize();
-
-        currentYaw = (float) Math.toDegrees(Math.atan2(-fromCenter.x, fromCenter.z));
-        currentPitch = (float) -Math.toDegrees(Math.asin(fromCenter.y));
-        setYRot(currentYaw);
-        setXRot(currentPitch);
-    }
-
-    void applyStabDamage(LivingEntity target) {
-        LivingEntity owner = getOwner();
-        if (owner == null) return;
-        float multiplier = STAB_DAMAGE_MULTIPLIERS[
-            Math.min(getAttackIndex(), STAB_DAMAGE_MULTIPLIERS.length - 1)];
-        float damage = baseDamage * multiplier;
-        // 官方模式（EchoingArrowProjectile）：直接从 registry 取法术引用构造伤害来源
-        var spell = SpellRegistry.LIZHI_YAN.get();
-        SpellDamageSource source = SpellDamageSource.source(this, owner, spell).setIFrames(5);
-        DamageSources.applyDamage(target, damage, source);
-    }
+    void applyStabDamage(LivingEntity target) { LizhiYanCombatExecutor.applyStabDamage(this,target); }
 
     // 协同光束：进入归位等待态（三剑都就绪后一起 startBlast）
     void startBlastReady() {
@@ -628,26 +402,6 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     // 工具方法
 
-    private void spawnSummonParticles() {
-        for (int i = 0; i < 10; i++) {
-            level().addParticle(ParticleTypes.END_ROD,
-                getX() + (random.nextDouble()-0.5)*0.4,
-                getY() + (random.nextDouble()-0.5)*0.4,
-                getZ() + (random.nextDouble()-0.5)*0.4,
-                0, 0.05, 0);
-        }
-    }
-
-    private void setInitialPosition(LivingEntity owner) {
-        Vec3 offset = FORMATION_OFFSETS[slotIndex];
-        float ownerYaw = owner.getYRot();
-        double yawRad = ownerYaw * 0.0174533f;
-        double cos = Math.cos(yawRad), sin = Math.sin(yawRad);
-        double rx = offset.x * cos - offset.z * sin;
-        double rz = offset.x * sin + offset.z * cos;
-        setPos(owner.getX() + rx, owner.getY() + offset.y, owner.getZ() + rz);
-    }
-
     @Override public boolean isPickable() { return false; }
     @Override public boolean isPushable() { return false; }
 
@@ -663,13 +417,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     public void remove(@NotNull RemovalReason reason) {
         if (!level().isClientSide && reason.shouldDestroy()) onRemovedHelper(this);
         if (level().isClientSide) {
-            for (int i = 0; i < 12; i++) {
-                level().addParticle(ParticleTypes.END_ROD,
-                    getX() + (random.nextDouble()-0.5),
-                    getY() + (random.nextDouble()-0.5),
-                    getZ() + (random.nextDouble()-0.5),
-                    (random.nextDouble()-0.5)*0.1, 0.05, (random.nextDouble()-0.5)*0.1);
-            }
+            presentation.spawnRemovalParticles();
         }
         super.remove(reason);
     }
