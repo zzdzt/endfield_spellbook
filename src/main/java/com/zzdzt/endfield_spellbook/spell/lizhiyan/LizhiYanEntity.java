@@ -105,6 +105,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     // 目标获取与丢失视线判定独立维护，实体类负责消费目标并驱动攻击状态机。
     private final LizhiYanTargeting targeting = new LizhiYanTargeting(this);
     private final LizhiYanMovementController movement = new LizhiYanMovementController(this);
+    private final LizhiYanFormationController formation = new LizhiYanFormationController(this);
     private final LizhiYanAttackController attackController = new LizhiYanAttackController(this);
 
 
@@ -306,8 +307,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         if (returnTick > 0) { updateReturnToFormation(owner); syncStateToClient(); return; }
         if (thrustController.isActive()) { thrustController.tick(); }
         else if (getAttackPhaseState() == Phase.SPIN) { updateSpin(owner); }
-        else if (getAttackPhaseState() == Phase.BLAST_READY) { updateBlastReadyPosition(owner); }
-        else if (getAttackPhaseState() == Phase.BLAST || getAttackPhaseState() == Phase.BLAST_DELAY) { holdBlastPosition(owner); }
+        else if (getAttackPhaseState() == Phase.BLAST_READY) { formation.updateBlastReadyPosition(owner); }
+        else if (getAttackPhaseState() == Phase.BLAST || getAttackPhaseState() == Phase.BLAST_DELAY) { formation.holdBlastPosition(owner); }
         else { updateFormationPosition(owner); }
 
         targeting.update(owner, range);
@@ -575,71 +576,9 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         return targeting;
     }
 
-    /**
-     * 协同光束站位：玩家<b>身后偏左</b>、竖直三角分布——光束从身后射出、不穿玩家身体。
-     * 抽出公共方法：barrier 也要用它判断"是否到达站位"，避免剑没飞到位就齐射。
-     */
-    private Vec3 computeBlastPosition(LivingEntity owner, int slot) {
-        float yawRad = owner.getYRot() * 0.0174533f;
-        double sin = Math.sin(yawRad), cos = Math.cos(yawRad);
-        Vec3 center = owner.position()
-                .add(sin * 2.5, 1.4, cos * 2.5)          // 身后
-                .add(-cos * 1.6, 0, -sin * 1.6);         // 偏左
-        double angle = slot * 2.0 * Math.PI / 3.0 + Math.PI / 2.0;
-        Vec3 right = new Vec3(cos, 0, sin);
-        return center.add(right.scale(Math.cos(angle) * 0.7))
-                .add(0, Math.sin(angle) * 0.7, 0);
-    }
-
-    private void updateBlastReadyPosition(LivingEntity owner) {
-        // 惰性锁定：进入 BLAST_READY 后第一次调用时固定站位，之后不再漂移
-        Vec3 lockedPos = getBlastReadyPos();
-        if (lockedPos == null) {
-            lockedPos = computeBlastPosition(owner, slotIndex);
-            setBlastReadyPos(lockedPos);
-        }
-        flyToward(lockedPos, 0.30, 1.0, aimFacing(owner));
-    }
-
-    /** 齐射后悬停在锁定站位（蓄力/后摇），保持三剑阵型与瞄准，直到 SPIN 把剑拉回身后环。 */
-    private void holdBlastPosition(LivingEntity owner) {
-        Vec3 lockedPos = getBlastReadyPos();
-        if (lockedPos == null) return;
-        flyToward(lockedPos, 0.25, 0.6, aimFacing(owner));
-    }
-
-    /** 剑尖朝向：目标存活时朝目标（0.55 身高），否则朝玩家前方。 */
-    private Vec3 aimFacing(LivingEntity owner) {
-        if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
-            return targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight() / 2, 0)
-                    .subtract(position()).normalize();
-        }
-        float yawRad = owner.getYRot() * 0.0174533f;
-        return new Vec3((float) -Math.sin(yawRad), 0, (float) -Math.cos(yawRad));
-    }
-
-    /**
-     * 协同光束屏障（严格版）：所有剑 phase 在 blast 序列 + 各自 closeTo 自己的锁定站位，
-     * 才一起齐射。仅靠 phase 序列不够——phase 进入早但飞行未到位就齐射会出现"还在编队位就开枪"。
-     */
-    boolean allAtBlastPositions(LivingEntity owner) {
-        for (LizhiYanEntity s : getSiblingSwords()) {
-            if (!s.swordReadyAndAtPos(owner)) return false;
-        }
-        return swordReadyAndAtPos(owner);
-    }
-
-    private boolean swordReadyAndAtPos(LivingEntity owner) {
-        Phase p = getAttackPhaseState();
-        // 已发射 / 后摇中的剑（BLAST、BLAST_DELAY、SPIN）：不再做就位判定。
-        // ⚠️ 关键：startBlast 后剑会离开齐射站位，若仍要求 closeTo，其余剑会判定它"未就位"
-        // 而一直卡到超时 —— 这正是"一把先射、另两把苦等一段时间"的根因。
-        if (p == Phase.BLAST || p == Phase.BLAST_DELAY || p == Phase.SPIN) return true;
-        if (p != Phase.BLAST_READY) return false;
-        // 用锁定站位（未锁定则实时算一次）；阈值 0.6 避免阻尼追踪尾段卡在判定之外
-        Vec3 lockedPos = getBlastReadyPos();
-        Vec3 target = lockedPos != null ? lockedPos : computeBlastPosition(owner, slotIndex);
-        return closeTo(target, 0.6);
+    /** Formation-controller bridge: whether this sword has reached its locked firing position. */
+    boolean swordReadyAndAtPos(LivingEntity owner) {
+        return formation.swordReadyAndAtPos(owner);
     }
 
     // 冲击波
