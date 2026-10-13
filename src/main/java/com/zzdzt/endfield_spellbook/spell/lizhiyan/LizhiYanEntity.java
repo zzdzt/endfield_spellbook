@@ -424,19 +424,19 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         incrementAttackIndex();
         if (getAttackIndex() >= 2) {
             setAttackPhaseState(Phase.BLAST_READY);
-            phaseTick = 0;
+            setAttackPhaseTick(0);
             blastReadyHold = 0;
             returnTick = 0;
         } else {
             returnTick = RETURN_TICKS;
             setAttackPhaseState(Phase.COOLDOWN);
-            phaseTick = 0;
+            setAttackPhaseTick(0);
         }
     }
 
     void returnToIdleAfterMissingThrustTarget() {
         setAttackPhaseState(Phase.IDLE);
-        phaseTick = 0;
+        setAttackPhaseTick(0);
     }
 
     @Nullable
@@ -542,8 +542,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     // 协同光束：进入归位等待态（三剑都就绪后一起 startBlast）
     void startBlastReady() {
-        phase = Phase.BLAST_READY;
-        phaseTick = 0;
+        setAttackPhaseState(Phase.BLAST_READY);
+        setAttackPhaseTick(0);
         blastReadyHold = 0;
         entityData.set(CHARGE_SCALE, 1.0f);
     }
@@ -635,8 +635,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     // 冲击波
     void startBlast(LivingEntity owner) {
-        phase = Phase.BLAST;
-        phaseTick = 0;
+        setAttackPhaseState(Phase.BLAST);
+        setAttackPhaseTick(0);
         // ⚠️ 此处不能清空 blastReadyPos：BLAST/BLAST_DELAY 阶段还要靠它悬停在齐射站位。
         // 站位锁定在 SPIN 结束（attackIndex 归零）时释放，下一轮重新锁定。
 
