@@ -2,6 +2,7 @@ package com.zzdzt.endfield_spellbook.spell.lizhiyan;
 
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Orchestrates LizhiYan's top-level attack phase machine.
@@ -15,6 +16,8 @@ final class LizhiYanAttackController {
     private LizhiYanEntity.Phase phase = LizhiYanEntity.Phase.IDLE;
     private int phaseTick;
     private int attackIndex;
+    @Nullable private Vec3 blastLockedDirection;
+    private int blastReadyHold;
 
     LizhiYanAttackController(LizhiYanEntity entity) {
         this.entity = entity;
@@ -27,6 +30,11 @@ final class LizhiYanAttackController {
     void setPhaseTick(int value) { phaseTick = value; }
     void setAttackIndex(int value) { attackIndex = Math.max(0, value); }
     void incrementAttackIndex() { attackIndex++; }
+    @Nullable Vec3 blastLockedDirection() { return blastLockedDirection; }
+    void setBlastLockedDirection(@Nullable Vec3 value) { blastLockedDirection = value; }
+    int blastReadyHold() { return blastReadyHold; }
+    void incrementBlastReadyHold() { blastReadyHold++; }
+    void resetBlastReadyHold() { blastReadyHold = 0; }
 
     void tick(LivingEntity owner) {
         switch (phase) {
@@ -44,7 +52,7 @@ final class LizhiYanAttackController {
                         && entity.targetingController().getCurrentTarget().isAlive()) {
                     phase = LizhiYanEntity.Phase.CHARGE;
                     phaseTick = 0;
-                    entity.blastLockedDirection = null;
+                    blastLockedDirection = null;
                     entity.resetThrustDamageState();
                 }
                 break;
@@ -61,7 +69,7 @@ final class LizhiYanAttackController {
                         && entity.targetingController().getCurrentTarget() != null) {
                     Vec3 tc = entity.targetingController().getCurrentTarget().position()
                         .add(0, entity.targetingController().getCurrentTarget().getBbHeight() / 2, 0);
-                    entity.blastLockedDirection = tc.subtract(entity.position()).normalize();
+                    blastLockedDirection = tc.subtract(entity.position()).normalize();
                 }
 
                 float chargeProgress = phaseTick / (float) chargeThreshold;
@@ -87,12 +95,12 @@ final class LizhiYanAttackController {
                 // Wait until all swords have reached their locked firing positions,
                 // then hold briefly for coordinated charge before firing.
                 phaseTick++;
-                if (entity.allAtBlastPositions(owner)) entity.blastReadyHold++;
-                else entity.blastReadyHold = 0;
-                if (entity.blastReadyHold >= LizhiYanEntity.BLAST_CHARGE_TICKS
+                if (entity.allAtBlastPositions(owner)) blastReadyHold++;
+                else blastReadyHold = 0;
+                if (blastReadyHold >= LizhiYanEntity.BLAST_CHARGE_TICKS
                         || phaseTick >= LizhiYanEntity.BLAST_READY_TIMEOUT) {
                     entity.startBlast(owner);
-                    entity.blastReadyHold = 0;
+                    blastReadyHold = 0;
                 }
                 break;
 
@@ -117,7 +125,7 @@ final class LizhiYanAttackController {
                     phaseTick = 0;
                     // Release the firing-position lock and charge counter for the next cycle.
                     entity.blastReadyPos = null;
-                    entity.blastReadyHold = 0;
+                    blastReadyHold = 0;
                 }
                 break;
 
@@ -136,13 +144,13 @@ final class LizhiYanAttackController {
                         attackIndex = 0;
                         phase = LizhiYanEntity.Phase.CHARGE;
                         phaseTick = 0;
-                        entity.blastLockedDirection = null;
+                        blastLockedDirection = null;
                         entity.resetThrustDamageState();
                     } else if (entity.targetingController().getCurrentTarget() != null
                             && entity.targetingController().getCurrentTarget().isAlive()) {
                         phase = LizhiYanEntity.Phase.CHARGE;
                         phaseTick = 0;
-                        entity.blastLockedDirection = null;
+                        blastLockedDirection = null;
                         entity.resetThrustDamageState();
                     } else {
                         phase = LizhiYanEntity.Phase.IDLE;
