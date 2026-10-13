@@ -22,15 +22,11 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSusceptible, CasterOwnedEntity {
@@ -662,8 +658,6 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         }
 
         Vec3 startPos = position().add(0, 0.3, 0);
-        Vec3 endPos = startPos.add(lookDir.scale(range));
-
         // 发射光束前，剑尖对准发射方向（startBlast 此前不设置朝向，剑可能指向别处）
         if (lookDir.lengthSqr() > 1e-6) faceDirection(lookDir, 1.0);
 
