@@ -124,8 +124,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     private int returnTick = 0;
 
-    // 协同光束站位锁仍由实体持有：它与实际位置/飞行逻辑紧密耦合。
-    @Nullable Vec3 blastReadyPos;
+    // 齐射站位的实际移动由实体执行，站位锁定状态由攻击控制器持有。
 
     // 方向缓存
     private float currentYaw = 0f;
@@ -180,6 +179,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     void incrementAttackIndex() { attackController.incrementAttackIndex(); }
     @Nullable Vec3 getBlastLockedDirection() { return attackController.blastLockedDirection(); }
     void setBlastLockedDirection(@Nullable Vec3 value) { attackController.setBlastLockedDirection(value); }
+    @Nullable Vec3 getBlastReadyPos() { return attackController.blastReadyPos(); }
+    void setBlastReadyPos(@Nullable Vec3 value) { attackController.setBlastReadyPos(value); }
     int getBlastReadyHold() { return attackController.blastReadyHold(); }
     void incrementBlastReadyHold() { attackController.incrementBlastReadyHold(); }
     void resetBlastReadyHold() { attackController.resetBlastReadyHold(); }
@@ -591,14 +592,19 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     private void updateBlastReadyPosition(LivingEntity owner) {
         // 惰性锁定：进入 BLAST_READY 后第一次调用时固定站位，之后不再漂移
-        if (blastReadyPos == null) blastReadyPos = computeBlastPosition(owner, slotIndex);
-        flyToward(blastReadyPos, 0.30, 1.0, aimFacing(owner));
+        Vec3 lockedPos = getBlastReadyPos();
+        if (lockedPos == null) {
+            lockedPos = computeBlastPosition(owner, slotIndex);
+            setBlastReadyPos(lockedPos);
+        }
+        flyToward(lockedPos, 0.30, 1.0, aimFacing(owner));
     }
 
     /** 齐射后悬停在锁定站位（蓄力/后摇），保持三剑阵型与瞄准，直到 SPIN 把剑拉回身后环。 */
     private void holdBlastPosition(LivingEntity owner) {
-        if (blastReadyPos == null) return;
-        flyToward(blastReadyPos, 0.25, 0.6, aimFacing(owner));
+        Vec3 lockedPos = getBlastReadyPos();
+        if (lockedPos == null) return;
+        flyToward(lockedPos, 0.25, 0.6, aimFacing(owner));
     }
 
     /** 剑尖朝向：目标存活时朝目标（0.55 身高），否则朝玩家前方。 */
@@ -630,7 +636,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         if (p == Phase.BLAST || p == Phase.BLAST_DELAY || p == Phase.SPIN) return true;
         if (p != Phase.BLAST_READY) return false;
         // 用锁定站位（未锁定则实时算一次）；阈值 0.6 避免阻尼追踪尾段卡在判定之外
-        Vec3 target = blastReadyPos != null ? blastReadyPos : computeBlastPosition(owner, slotIndex);
+        Vec3 lockedPos = getBlastReadyPos();
+        Vec3 target = lockedPos != null ? lockedPos : computeBlastPosition(owner, slotIndex);
         return closeTo(target, 0.6);
     }
 
@@ -638,7 +645,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     void startBlast(LivingEntity owner) {
         setAttackPhaseState(Phase.BLAST);
         setAttackPhaseTick(0);
-        // ⚠️ 此处不能清空 blastReadyPos：BLAST/BLAST_DELAY 阶段还要靠它悬停在齐射站位。
+        // ⚠️ 此处不能清空齐射站位锁：BLAST/BLAST_DELAY 阶段还要靠它悬停在齐射站位。
         // 站位锁定在 SPIN 结束（attackIndex 归零）时释放，下一轮重新锁定。
 
         // 发射方向：目标存活时按当前站位（身后偏左）实时对准 ——
