@@ -19,11 +19,12 @@ public final class WindArrowImpactRenderer {
     private WindArrowImpactRenderer() {
     }
 
-    public static void render(WindArrowRenderState state, PoseStack poseStack,
-                              MultiBufferSource bufferSource) {
+    public static void render(WindArrowRenderState state, WindArrowRenderContext context) {
         if (state.age < IMPACT_START_AGE) {
             return;
         }
+        PoseStack poseStack = context.poseStack;
+        MultiBufferSource bufferSource = context.bufferSource;
 
         WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);
         if (state.visualStyle == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT) {

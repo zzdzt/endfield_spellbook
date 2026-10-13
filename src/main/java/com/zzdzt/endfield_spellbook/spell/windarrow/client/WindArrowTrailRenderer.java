@@ -18,8 +18,9 @@ public final class WindArrowTrailRenderer {
     }
 
     /** 轨迹层统一入口：世界轴主束 + 弹道局部坐标下的弧带与星链。 */
-    public static void render(WindArrowRenderState state, PoseStack poseStack,
-                              MultiBufferSource bufferSource) {
+    public static void render(WindArrowRenderState state, WindArrowRenderContext context) {
+        PoseStack poseStack = context.poseStack;
+        MultiBufferSource bufferSource = context.bufferSource;
         renderMainRibbon(state, poseStack, bufferSource);
 
         WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);

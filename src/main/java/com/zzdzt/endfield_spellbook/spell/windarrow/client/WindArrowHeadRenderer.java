@@ -15,8 +15,9 @@ public final class WindArrowHeadRenderer {
     private WindArrowHeadRenderer() {
     }
 
-    public static void render(WindArrowRenderState state, PoseStack poseStack,
-                              MultiBufferSource bufferSource) {
+    public static void render(WindArrowRenderState state, WindArrowRenderContext context) {
+        PoseStack poseStack = context.poseStack;
+        MultiBufferSource bufferSource = context.bufferSource;
         WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);
         // 箭矢前锋：几何楔形保持体积感，专用晶体贴图补足白芯、切面和锐利边缘。
         float tipY = state.visibleLength;
