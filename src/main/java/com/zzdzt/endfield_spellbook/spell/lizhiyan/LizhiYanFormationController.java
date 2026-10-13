@@ -1,5 +1,6 @@
 package com.zzdzt.endfield_spellbook.spell.lizhiyan;
 
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -68,7 +69,7 @@ final class LizhiYanFormationController {
 
     /** Sword-tip facing: track a live target, otherwise face forward relative to the owner. */
     private Vec3 aimFacing(LivingEntity owner) {
-        LivingEntity target = entity.targetingController().getCurrentTarget();
+        Entity target = entity.targetingController().getCurrentTarget();
         if (target != null && target.isAlive()) {
             return target.position().add(0, target.getBbHeight() / 2, 0)
                     .subtract(entity.position()).normalize();
