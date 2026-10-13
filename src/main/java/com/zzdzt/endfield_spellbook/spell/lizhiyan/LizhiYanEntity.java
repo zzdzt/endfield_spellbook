@@ -399,10 +399,9 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     // 攻击状态机
-    private void updateAttackState(LivingEntity owner) {
-        switch (phase) {
-            case IDLE:
-       Stab() {
+    // 戳刺（阻尼追踪相位机：后顿 → 冲刺 → 惯性滑行，物理时长，参照 YujianCraft flyToward）
+    // 穿刺细分状态交由专用控制器；实体继续编排主攻击阶段。
+    void startStab() {
         thrustController.start();
     }
 
