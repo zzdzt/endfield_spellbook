@@ -17,6 +17,17 @@ public final class WindArrowTrailRenderer {
     private WindArrowTrailRenderer() {
     }
 
+    // swirl 弧带与星点排布常量：每帧内容不变，避免热路径重复分配数组。
+    private static final float[] SWIRL_POSITIONS = {0.13f, 0.39f, 0.66f, 0.88f};
+    private static final float[] SWIRL_RADIUS_X = {0.90f, 1.22f, 1.01f, 1.29f};
+    private static final float[] SWIRL_RADIUS_Z = {0.99f, 1.31f, 1.10f, 1.25f};
+    private static final float[] SWIRL_STARTS = {0.18f, 1.43f, 2.79f, 4.07f};
+    private static final float[] SWIRL_SPANS = {4.78f, 4.55f, 4.94f, 4.62f};
+    private static final float[] SWIRL_TILTS = {0.48f, -0.60f, 0.68f, -0.55f};
+    private static final float[] STAR_POSITIONS = {0.09f, 0.18f, 0.27f, 0.39f, 0.51f, 0.63f, 0.76f, 0.89f, 0.96f};
+    private static final float[] FLASH_POSITIONS = {0.15f, 0.45f, 0.72f, 0.93f};
+    private static final float[] SHARD_POSITIONS = {0.24f, 0.58f, 0.81f};
+
     /** 轨迹层统一入口：世界轴主束 + 弹道局部坐标下的弧带与星链。 */
     public static void render(WindArrowRenderState state, WindArrowRenderContext context) {
         PoseStack poseStack = context.poseStack;
@@ -90,6 +101,9 @@ public final class WindArrowTrailRenderer {
     /**
      * 相机朝向的渐缩轨迹带。区别于固定平面贴片：side vector 随观看方向求解，
      * 镜头从正面、侧面或俯视时都能看见带宽。沿长度采样微小 S 曲线，尾端透明、前锋更亮。
+     *
+     * <p>热路径全标量实现：与 Vec3 逐位同序的公式展开，循环内零对象分配；
+     * normalize 保留 Vec3 的 1.0E-4 零向量语义与原两级 fallback 顺序。
      */
     private static void renderWindArrowBillboardRibbon(PoseStack poseStack, VertexConsumer consumer,
                                                        Vec3 originWorld, Vec3 direction, Vec3 cameraWorld,
@@ -106,61 +120,214 @@ public final class WindArrowTrailRenderer {
         int segments = Mth.clamp((int) Math.ceil(length * 12.0f), 24, 96);
         PoseStack.Pose pose = poseStack.last();
 
-        Vec3 previousSide = null;
-        Vec3[] centers = new Vec3[segments + 1];
+        double dirX = direction.x;
+        double dirY = direction.y;
+        double dirZ = direction.z;
+        double camX = cameraWorld.x;
+        double camY = cameraWorld.y;
+        double camZ = cameraWorld.z;
+        double orgX = originWorld.x;
+        double orgY = originWorld.y;
+        double orgZ = originWorld.z;
+
+        // 中心线：中心点 + S 形偏移，全部标量存储，避免逐段 Vec3 短命对象。
+        double[] centerX = new double[segments + 1];
+        double[] centerY = new double[segments + 1];
+        double[] centerZ = new double[segments + 1];
+        double prevSideX = 0.0;
+        double prevSideY = 0.0;
+        double prevSideZ = 0.0;
+        boolean hasPrevSide = false;
+
         for (int i = 0; i <= segments; i++) {
             float t = i / (float) segments;
             float along = tailStart + length * t;
-            Vec3 baseCenter = direction.scale(along);
-            Vec3 centerWorld = originWorld.add(baseCenter);
+            double baseX = dirX * along;
+            double baseY = dirY * along;
+            double baseZ = dirZ * along;
+            double worldX = orgX + baseX;
+            double worldY = orgY + baseY;
+            double worldZ = orgZ + baseZ;
 
-            Vec3 view = cameraWorld.subtract(centerWorld);
-            if (view.lengthSqr() < 1.0e-6) {
-                view = new Vec3(0.0, 0.0, 1.0);
+            // view = camera - centerWorld；与原 Vec3 流程一致：短向量取 (0,0,1)。
+            double viewX = camX - worldX;
+            double viewY = camY - worldY;
+            double viewZ = camZ - worldZ;
+            double viewLenSqr = viewX * viewX + viewY * viewY + viewZ * viewZ;
+            if (viewLenSqr < 1.0e-6) {
+                viewX = 0.0;
+                viewY = 0.0;
+                viewZ = 1.0;
             } else {
-                view = view.normalize();
+                double viewLen = Math.sqrt(viewLenSqr);
+                if (viewLen >= 1.0E-4) {
+                    viewX /= viewLen;
+                    viewY /= viewLen;
+                    viewZ /= viewLen;
+                } else {
+                    viewX = 0.0;
+                    viewY = 0.0;
+                    viewZ = 0.0;
+                }
             }
-            Vec3 side = direction.cross(view);
-            if (side.lengthSqr() < 1.0e-6) {
-                side = direction.cross(new Vec3(0.0, 1.0, 0.0));
+
+            // side = direction × view，带两级与原实现相同的退化 fallback。
+            double sideX = dirY * viewZ - dirZ * viewY;
+            double sideY = dirZ * viewX - dirX * viewZ;
+            double sideZ = dirX * viewY - dirY * viewX;
+            if (sideX * sideX + sideY * sideY + sideZ * sideZ < 1.0e-6) {
+                sideX = -dirZ;
+                sideY = 0.0;
+                sideZ = dirX;
             }
-            if (side.lengthSqr() < 1.0e-6) {
-                side = direction.cross(new Vec3(1.0, 0.0, 0.0));
+            if (sideX * sideX + sideY * sideY + sideZ * sideZ < 1.0e-6) {
+                sideX = 0.0;
+                sideY = dirZ;
+                sideZ = -dirY;
             }
-            side = side.normalize();
-            if (previousSide != null && side.dot(previousSide) < 0.0) {
-                side = side.scale(-1.0);
+            double sideLen = Math.sqrt(sideX * sideX + sideY * sideY + sideZ * sideZ);
+            if (sideLen >= 1.0E-4) {
+                sideX /= sideLen;
+                sideY /= sideLen;
+                sideZ /= sideLen;
+            } else {
+                sideX = 0.0;
+                sideY = 0.0;
+                sideZ = 0.0;
             }
-            previousSide = side;
-            Vec3 normal = direction.cross(side).normalize();
+            if (hasPrevSide && sideX * prevSideX + sideY * prevSideY + sideZ * prevSideZ < 0.0) {
+                sideX = -sideX;
+                sideY = -sideY;
+                sideZ = -sideZ;
+            }
+            prevSideX = sideX;
+            prevSideY = sideY;
+            prevSideZ = sideZ;
+
+            double normalX = dirY * sideZ - dirZ * sideY;
+            double normalY = dirZ * sideX - dirX * sideZ;
+            double normalZ = dirX * sideY - dirY * sideX;
+            double normalLen = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+            if (normalLen >= 1.0E-4) {
+                normalX /= normalLen;
+                normalY /= normalLen;
+                normalZ /= normalLen;
+            } else {
+                normalX = 0.0;
+                normalY = 0.0;
+                normalZ = 0.0;
+            }
 
             // 两端回到主轴，中段产生一至两次轻微偏移，形成流动风迹而非折线弹道。
             float envelope = Mth.sin((float) Math.PI * t);
             float sideWave = Mth.sin(t * (float) Math.PI * 2.0f + age * 0.55f);
             float normalWave = Mth.sin(t * (float) Math.PI * 3.0f - age * 0.37f + 0.8f);
-            Vec3 offset = side.scale(curveAmplitude * sideWave * envelope)
-                .add(normal.scale(curveAmplitude * 0.46f * normalWave * envelope));
-            centers[i] = baseCenter.add(offset);
+            double offsetSide = curveAmplitude * sideWave * envelope;
+            double offsetNormal = curveAmplitude * 0.46f * normalWave * envelope;
+            centerX[i] = baseX + sideX * offsetSide + normalX * offsetNormal;
+            centerY[i] = baseY + sideY * offsetSide + normalY * offsetNormal;
+            centerZ[i] = baseZ + sideZ * offsetSide + normalZ * offsetNormal;
         }
 
         for (int i = 0; i < segments; i++) {
             float t0 = i / (float) segments;
             float t1 = (i + 1) / (float) segments;
-            Vec3 c0 = centers[i];
-            Vec3 c1 = centers[i + 1];
-            Vec3 tangent = c1.subtract(c0).normalize();
+            double c0x = centerX[i];
+            double c0y = centerY[i];
+            double c0z = centerZ[i];
+            double c1x = centerX[i + 1];
+            double c1y = centerY[i + 1];
+            double c1z = centerZ[i + 1];
+            double tangentX = c1x - c0x;
+            double tangentY = c1y - c0y;
+            double tangentZ = c1z - c0z;
+            double tangentLen = Math.sqrt(tangentX * tangentX + tangentY * tangentY + tangentZ * tangentZ);
+            if (tangentLen >= 1.0E-4) {
+                tangentX /= tangentLen;
+                tangentY /= tangentLen;
+                tangentZ /= tangentLen;
+            } else {
+                tangentX = 0.0;
+                tangentY = 0.0;
+                tangentZ = 0.0;
+            }
 
-            Vec3 centerWorld0 = originWorld.add(c0);
-            Vec3 centerWorld1 = originWorld.add(c1);
-            Vec3 view0 = cameraWorld.subtract(centerWorld0).normalize();
-            Vec3 view1 = cameraWorld.subtract(centerWorld1).normalize();
-            Vec3 side0 = tangent.cross(view0);
-            Vec3 side1 = tangent.cross(view1);
-            if (side0.lengthSqr() < 1.0e-6) side0 = direction.cross(new Vec3(0.0, 1.0, 0.0));
-            if (side1.lengthSqr() < 1.0e-6) side1 = direction.cross(new Vec3(0.0, 1.0, 0.0));
-            side0 = side0.normalize();
-            side1 = side1.normalize();
-            if (side0.dot(side1) < 0.0) side1 = side1.scale(-1.0);
+            double world0X = orgX + c0x;
+            double world0Y = orgY + c0y;
+            double world0Z = orgZ + c0z;
+            double world1X = orgX + c1x;
+            double world1Y = orgY + c1y;
+            double world1Z = orgZ + c1z;
+            // view0/1 = (camera - centerWorld).normalize()，与原实现一致：无短向量前置检查。
+            double view0X = camX - world0X;
+            double view0Y = camY - world0Y;
+            double view0Z = camZ - world0Z;
+            double view0Len = Math.sqrt(view0X * view0X + view0Y * view0Y + view0Z * view0Z);
+            if (view0Len >= 1.0E-4) {
+                view0X /= view0Len;
+                view0Y /= view0Len;
+                view0Z /= view0Len;
+            } else {
+                view0X = 0.0;
+                view0Y = 0.0;
+                view0Z = 0.0;
+            }
+            double view1X = camX - world1X;
+            double view1Y = camY - world1Y;
+            double view1Z = camZ - world1Z;
+            double view1Len = Math.sqrt(view1X * view1X + view1Y * view1Y + view1Z * view1Z);
+            if (view1Len >= 1.0E-4) {
+                view1X /= view1Len;
+                view1Y /= view1Len;
+                view1Z /= view1Len;
+            } else {
+                view1X = 0.0;
+                view1Y = 0.0;
+                view1Z = 0.0;
+            }
+
+            double side0X = tangentY * view0Z - tangentZ * view0Y;
+            double side0Y = tangentZ * view0X - tangentX * view0Z;
+            double side0Z = tangentX * view0Y - tangentY * view0X;
+            if (side0X * side0X + side0Y * side0Y + side0Z * side0Z < 1.0e-6) {
+                side0X = -dirZ;
+                side0Y = 0.0;
+                side0Z = dirX;
+            }
+            double side0Len = Math.sqrt(side0X * side0X + side0Y * side0Y + side0Z * side0Z);
+            if (side0Len >= 1.0E-4) {
+                side0X /= side0Len;
+                side0Y /= side0Len;
+                side0Z /= side0Len;
+            } else {
+                side0X = 0.0;
+                side0Y = 0.0;
+                side0Z = 0.0;
+            }
+
+            double side1X = tangentY * view1Z - tangentZ * view1Y;
+            double side1Y = tangentZ * view1X - tangentX * view1Z;
+            double side1Z = tangentX * view1Y - tangentY * view1X;
+            if (side1X * side1X + side1Y * side1Y + side1Z * side1Z < 1.0e-6) {
+                side1X = -dirZ;
+                side1Y = 0.0;
+                side1Z = dirX;
+            }
+            double side1Len = Math.sqrt(side1X * side1X + side1Y * side1Y + side1Z * side1Z);
+            if (side1Len >= 1.0E-4) {
+                side1X /= side1Len;
+                side1Y /= side1Len;
+                side1Z /= side1Len;
+            } else {
+                side1X = 0.0;
+                side1Y = 0.0;
+                side1Z = 0.0;
+            }
+            if (side0X * side1X + side0Y * side1Y + side0Z * side1Z < 0.0) {
+                side1X = -side1X;
+                side1Y = -side1Y;
+                side1Z = -side1Z;
+            }
 
             float eased0 = t0 * t0 * (3.0f - 2.0f * t0);
             float eased1 = t1 * t1 * (3.0f - 2.0f * t1);
@@ -169,18 +336,26 @@ public final class WindArrowTrailRenderer {
             // 尾端柔和淡出，但不要把最初一大段压得过暗；旧曲线使拖尾前半段几乎不可见。
             float fade0 = smoothstep(0.0f, 0.11f, t0) * (0.46f + 0.54f * t0);
             float fade1 = smoothstep(0.0f, 0.11f, t1) * (0.46f + 0.54f * t1);
-            Vec3 left0 = c0.subtract(side0.scale(width0));
-            Vec3 right0 = c0.add(side0.scale(width0));
-            Vec3 left1 = c1.subtract(side1.scale(width1));
-            Vec3 right1 = c1.add(side1.scale(width1));
+            double left0X = c0x - side0X * width0;
+            double left0Y = c0y - side0Y * width0;
+            double left0Z = c0z - side0Z * width0;
+            double right0X = c0x + side0X * width0;
+            double right0Y = c0y + side0Y * width0;
+            double right0Z = c0z + side0Z * width0;
+            double left1X = c1x - side1X * width1;
+            double left1Y = c1y - side1Y * width1;
+            double left1Z = c1z - side1Z * width1;
+            double right1X = c1x + side1X * width1;
+            double right1Y = c1y + side1Y * width1;
+            double right1Z = c1z + side1Z * width1;
 
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) left0.x, (float) left0.y, (float) left0.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) left0X, (float) left0Y, (float) left0Z,
                 t0, 1.0f, red, green, blue, alpha * fade0, 0.0f, 1.0f, 0.0f);
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) right0.x, (float) right0.y, (float) right0.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) right0X, (float) right0Y, (float) right0Z,
                 t0, 0.0f, red, green, blue, alpha * fade0, 0.0f, 1.0f, 0.0f);
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) right1.x, (float) right1.y, (float) right1.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) right1X, (float) right1Y, (float) right1Z,
                 t1, 0.0f, red, green, blue, alpha * fade1, 0.0f, 1.0f, 0.0f);
-            WindArrowRenderUtil.emitVertex(pose, consumer, (float) left1.x, (float) left1.y, (float) left1.z,
+            WindArrowRenderUtil.emitVertex(pose, consumer, (float) left1X, (float) left1Y, (float) left1Z,
                 t1, 1.0f, red, green, blue, alpha * fade1, 0.0f, 1.0f, 0.0f);
         }
     }
@@ -196,12 +371,12 @@ public final class WindArrowTrailRenderer {
         }
 
         // 视频参考是少量大幅卷风环：开口弧的空间尺寸远大于主束，并随年龄产生扭转。
-        float[] positions = {0.13f, 0.39f, 0.66f, 0.88f};
-        float[] radiusX = {0.90f, 1.22f, 1.01f, 1.29f};
-        float[] radiusZ = {0.99f, 1.31f, 1.10f, 1.25f};
-        float[] starts = {0.18f, 1.43f, 2.79f, 4.07f};
-        float[] spans = {4.78f, 4.55f, 4.94f, 4.62f};
-        float[] axialTilt = {0.48f, -0.60f, 0.68f, -0.55f};
+        float[] positions = SWIRL_POSITIONS;
+        float[] radiusX = SWIRL_RADIUS_X;
+        float[] radiusZ = SWIRL_RADIUS_Z;
+        float[] starts = SWIRL_STARTS;
+        float[] spans = SWIRL_SPANS;
+        float[] axialTilt = SWIRL_TILTS;
 
         for (int i = 0; i < positions.length; i++) {
             float direction = (i % 2 == 0 ? 1.0f : -1.0f);
@@ -290,7 +465,7 @@ public final class WindArrowTrailRenderer {
         }
 
         // 星芒沿弧带之间错落分布：主星更亮更大，辅星较暗，避免均匀圆点链。
-        float[] starPositions = {0.09f, 0.18f, 0.27f, 0.39f, 0.51f, 0.63f, 0.76f, 0.89f, 0.96f};
+        float[] starPositions = STAR_POSITIONS;
         for (int i = 0; i < starPositions.length; i++) {
             float y = length * starPositions[i];
             float phase = age * 0.43f + i * 2.21f;
@@ -308,7 +483,7 @@ public final class WindArrowTrailRenderer {
         }
 
         // 稀疏锐利闪光：窄白芯配冷蓝外晕，位置与大星芒错开，避免形成均匀的点线链。
-        float[] flashPositions = {0.15f, 0.45f, 0.72f, 0.93f};
+        float[] flashPositions = FLASH_POSITIONS;
         for (int i = 0; i < flashPositions.length; i++) {
             float y = length * flashPositions[i];
             float phase = age * 0.47f + i * 1.91f;
@@ -322,7 +497,7 @@ public final class WindArrowTrailRenderer {
         }
 
         // 少数斜置晶片/长碎光。尺寸很小，避免回到“密集线圈+杂乱刮线”的观感。
-        float[] shardPositions = {0.24f, 0.58f, 0.81f};
+        float[] shardPositions = SHARD_POSITIONS;
         for (int i = 0; i < shardPositions.length; i++) {
             float y = length * shardPositions[i];
             float phase = age * 0.31f + i * 2.2f;
