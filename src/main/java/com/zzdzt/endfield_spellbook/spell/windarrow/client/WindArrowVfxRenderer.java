@@ -18,12 +18,8 @@ public final class WindArrowVfxRenderer {
 
     public static void render(LizhiYanBlastVisualEntity entity, float partialTicks,
                               PoseStack poseStack, MultiBufferSource bufferSource) {
-        if (entity.distance <= 0.001f) {
-            return;
-        }
-
         WindArrowRenderState state = WindArrowRenderState.create(entity, partialTicks);
-        if (state.isExpired()) {
+        if (!state.visible() || state.isExpired()) {
             return;
         }
 

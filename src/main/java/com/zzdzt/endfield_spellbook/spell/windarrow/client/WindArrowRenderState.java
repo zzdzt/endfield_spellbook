@@ -87,4 +87,9 @@ public final class WindArrowRenderState {
     public boolean isExpired() {
         return trailAlpha <= 0.001f;
     }
+
+    /** 弹道短到不可见时整帧可跳过。 */
+    public boolean visible() {
+        return visibleLength > 0.01f;
+    }
 }
