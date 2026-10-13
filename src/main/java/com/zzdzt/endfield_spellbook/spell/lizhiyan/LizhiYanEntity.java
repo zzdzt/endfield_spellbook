@@ -655,6 +655,23 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
                 getBoundingBox().inflate(96), e -> e != this && ownerUUID.equals(e.ownerUUID));
     }
 
+
+    /** 仅在初始索敌 / 首轮蓄力窗口内允许同步整组目标。 */
+    boolean isInitialTargetAcquisitionWindow() {
+        return attackIndex == 0
+            && (phase == Phase.IDLE || (phase == Phase.CHARGE && phaseTick <= CHARGE_TICKS_STAB));
+    }
+
+    /** Targeting controller bridge: same-owner sword group. */
+    List<LizhiYanEntity> getSiblingSwordsForTargeting() {
+        return getSiblingSwords();
+    }
+
+    /** Targeting controller bridge: share target state without duplicating ownership. */
+    LizhiYanTargeting getTargetingForCoordination() {
+        return targeting;
+    }
+
     /**
      * 协同光束站位：玩家<b>身后偏左</b>、竖直三角分布——光束从身后射出、不穿玩家身体。
      * 抽出公共方法：barrier 也要用它判断"是否到达站位"，避免剑没飞到位就齐射。
