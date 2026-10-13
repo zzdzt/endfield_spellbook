@@ -8,10 +8,16 @@ import net.minecraft.world.phys.Vec3;
 /**
  * 风矢视觉的单帧渲染状态。
  *
- * <p>集中保存渲染编排所需的时序、进度与空间量，由 {@link WindArrowVfxRenderer}
+ * <p>集中保存渲染编排所需的时序、进度、alpha 曲线与空间量，由 {@link WindArrowVfxRenderer}
  * 每帧创建一次，供轨迹/前锋/命中三个渲染通道共享；只做数值推导，不持有可变状态。
+ * 仅依赖 age 的共享动画计算（前锋脉冲、星链余痕 alpha、命中年龄）在此收口，
+ * 渲染器内只保留依赖顶点序的几何计算。
  */
 public final class WindArrowRenderState {
+
+    /** 命中爆闪起始年龄：箭矢前锋抵达弹道终点的时刻。 */
+    private static final float IMPACT_START_AGE = 3.0f;
+
     public final float age;
     public final float flightProgress;
     public final float visibleLength;
@@ -19,6 +25,14 @@ public final class WindArrowRenderState {
     public final float beamAlpha;
     public final float arcAlpha;
     public final float trailAlpha;
+    /** 星链余痕 alpha：trailAlpha × 显现残量曲线，仅依赖 age。 */
+    public final float afterglowAlpha;
+    /** 前锋脉冲：几何楔形呼吸系数，仅依赖 age。 */
+    public final float headPulse;
+    /** 前锋脉冲：贴图前锋呼吸系数（与几何楔形系数不同），仅依赖 age。 */
+    public final float headTexturePulse;
+    /** 命中爆闪年龄（age − 3.0，负值表示前锋尚未抵达）。 */
+    public final float impactAge;
     public final Vec3 originWorld;
     public final Vec3 direction;
     public final Vec3 cameraWorld;
@@ -31,8 +45,10 @@ public final class WindArrowRenderState {
 
     private WindArrowRenderState(float age, float flightProgress, float visibleLength,
                                  float activeTrailLength, float beamAlpha, float arcAlpha,
-                                 float trailAlpha, Vec3 originWorld, Vec3 direction,
-                                 Vec3 cameraWorld, int visualStyle, float bodyHalfHeight,
+                                 float trailAlpha, float afterglowAlpha, float headPulse,
+                                 float headTexturePulse, float impactAge,
+                                 Vec3 originWorld, Vec3 direction, Vec3 cameraWorld,
+                                 int visualStyle, float bodyHalfHeight,
                                  float yawDegrees, float pitchDegrees) {
         this.age = age;
         this.flightProgress = flightProgress;
@@ -41,6 +57,10 @@ public final class WindArrowRenderState {
         this.beamAlpha = beamAlpha;
         this.arcAlpha = arcAlpha;
         this.trailAlpha = trailAlpha;
+        this.afterglowAlpha = afterglowAlpha;
+        this.headPulse = headPulse;
+        this.headTexturePulse = headTexturePulse;
+        this.impactAge = impactAge;
         this.originWorld = originWorld;
         this.direction = direction;
         this.cameraWorld = cameraWorld;
@@ -62,6 +82,11 @@ public final class WindArrowRenderState {
         float beamAlpha = 1.0f - Mth.clamp((age - 3.45f) / 1.50f, 0.0f, 1.0f);
         float arcAlpha = 1.0f - Mth.clamp((age - 3.65f) / 2.65f, 0.0f, 1.0f);
         float trailAlpha = 1.0f - Mth.clamp((age - 3.0f) / 7.0f, 0.0f, 1.0f);
+        float revealResidual = Mth.clamp((age - 1.25f) / 1.55f, 0.0f, 1.0f);
+        float afterglowAlpha = trailAlpha * (0.12f + 0.48f * revealResidual);
+        float headPulse = 0.92f + 0.08f * Mth.sin(age * 1.7f);
+        float headTexturePulse = 0.94f + 0.06f * Mth.sin(age * 1.7f);
+        float impactAge = age - IMPACT_START_AGE;
 
         Vec3 originWorld = new Vec3(
             Mth.lerp(partialTicks, entity.xo, entity.getX()),
@@ -77,7 +102,8 @@ public final class WindArrowRenderState {
         Vec3 cameraWorld = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
 
         return new WindArrowRenderState(age, flightProgress, visibleLength, activeTrailLength,
-            beamAlpha, arcAlpha, trailAlpha, originWorld, direction, cameraWorld,
+            beamAlpha, arcAlpha, trailAlpha, afterglowAlpha, headPulse, headTexturePulse,
+            impactAge, originWorld, direction, cameraWorld,
             entity.getVisualStyle(),
             (float) entity.getBoundingBox().getYsize() * 0.5f,
             entity.getYRot(), entity.getXRot());

@@ -9,18 +9,15 @@ import net.minecraft.util.Mth;
 
 /**
  * 风矢命中层：普通命中爆闪与终结放射爆闪，全部为贴图三平面交叉绘制。
- * 爆闪在箭矢前锋（age ≥ 3.0）抵达弹道终点后展开。
+ * 爆闪在箭矢前锋抵达弹道终点后（state.impactAge ≥ 0）展开。
  */
 public final class WindArrowImpactRenderer {
-
-    /** 前锋抵达弹道终点的时刻，命中爆闪由此开始展开。 */
-    private static final float IMPACT_START_AGE = 3.0f;
 
     private WindArrowImpactRenderer() {
     }
 
     public static void render(WindArrowRenderState state, WindArrowRenderContext context) {
-        if (state.age < IMPACT_START_AGE) {
+        if (state.impactAge < 0f) {
             return;
         }
         PoseStack poseStack = context.poseStack;
@@ -29,10 +26,10 @@ public final class WindArrowImpactRenderer {
         WindArrowRenderUtil.pushTrajectoryPose(poseStack, state);
         if (state.visualStyle == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT) {
             drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT),
-                0, state.visibleLength, 0, state.age - IMPACT_START_AGE, false);
+                0, state.visibleLength, 0, state.impactAge, false);
         } else if (state.visualStyle == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_FINAL_HIT) {
             drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WindArrowRenderTypes.IMPACT_FINAL),
-                0, state.visibleLength, 0, state.age - IMPACT_START_AGE, true);
+                0, state.visibleLength, 0, state.impactAge, true);
         }
         poseStack.popPose();
     }

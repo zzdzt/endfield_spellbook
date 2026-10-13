@@ -104,7 +104,7 @@ public final class WindArrowTrailRenderer {
         VertexConsumer glow = bufferSource.getBuffer(WindArrowRenderTypes.GLOW);
         VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
         renderWindArrowAfterglow(poseStack, glow, sprites,
-            state.visibleLength, state.age, state.trailAlpha);
+            state.visibleLength, state.age, state.afterglowAlpha);
     }
 
     /**
@@ -531,13 +531,11 @@ public final class WindArrowTrailRenderer {
      */
     private static void renderWindArrowAfterglow(PoseStack poseStack, VertexConsumer glow,
                                                  VertexConsumer sprites, float length,
-                                                 float age, float trailAlpha) {
-        if (length <= 0.1f || trailAlpha <= 0.001f) {
+                                                 float age, float alpha) {
+        if (length <= 0.1f || alpha <= 0.001f) {
             return;
         }
 
-        float revealResidual = Mth.clamp((age - 1.25f) / 1.55f, 0.0f, 1.0f);
-        float alpha = trailAlpha * (0.12f + 0.48f * revealResidual);
         int nodeCount = Mth.clamp((int) Math.ceil(length / 0.92f) + 1, 8, 22);
         double[] nodeX = AFTERGLOW_NODE_X;
         double[] nodeY = AFTERGLOW_NODE_Y;

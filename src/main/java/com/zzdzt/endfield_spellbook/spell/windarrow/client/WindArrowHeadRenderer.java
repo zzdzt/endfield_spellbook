@@ -4,7 +4,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.util.Mth;
 
 /**
  * 风矢前锋层：几何楔形箭头 + 专用晶体贴图 + 尖端星芒。
@@ -22,9 +21,9 @@ public final class WindArrowHeadRenderer {
         // 箭矢前锋：几何楔形保持体积感，专用晶体贴图补足白芯、切面和锐利边缘。
         float tipY = state.visibleLength;
         VertexConsumer glow = bufferSource.getBuffer(WindArrowRenderTypes.GLOW);
-        renderGeometryHead(poseStack, glow, tipY, state.age, state.beamAlpha);
+        renderGeometryHead(poseStack, glow, tipY, state.headPulse, state.beamAlpha);
         VertexConsumer arrowHead = bufferSource.getBuffer(WindArrowRenderTypes.HEAD);
-        renderTextureHead(poseStack, arrowHead, 0.0f, tipY, 0.004f, state.age, state.beamAlpha);
+        renderTextureHead(poseStack, arrowHead, 0.0f, tipY, 0.004f, state.age, state.headTexturePulse, state.beamAlpha);
         // 中心星芒降为较小的尖端高光，避免盖过箭头轮廓。
         VertexConsumer sprites = bufferSource.getBuffer(WindArrowRenderTypes.SPRITES);
         WindArrowRenderUtil.drawSprite(poseStack, sprites, 0.0f, tipY, 0.008f,
@@ -39,12 +38,11 @@ public final class WindArrowHeadRenderer {
      */
     private static void renderTextureHead(PoseStack poseStack, VertexConsumer consumer,
                                           float cx, float tipY, float cz,
-                                          float age, float alpha) {
+                                          float age, float pulse, float alpha) {
         if (alpha <= 0.001f) {
             return;
         }
 
-        float pulse = 0.94f + 0.06f * Mth.sin(age * 1.7f);
         float halfWidth = 0.215f * pulse;
         float halfHeight = 0.285f * pulse;
         // 图案顶部的透明边距很小；略向前补偿，让纹理尖端贴合几何箭头顶点。
@@ -67,10 +65,9 @@ public final class WindArrowHeadRenderer {
      * 暗示前锋。沿局部 +Y 方向延伸，与该渲染通道的弹道轴保持一致。
      */
     private static void renderGeometryHead(PoseStack poseStack, VertexConsumer consumer,
-                                           float tipY, float age, float alpha) {
+                                           float tipY, float pulse, float alpha) {
         if (alpha <= 0.001f) return;
 
-        float pulse = 0.92f + 0.08f * Mth.sin(age * 1.7f);
         float length = 0.48f * pulse;
         float halfWidth = 0.175f * pulse;
         float baseY = tipY - length;
