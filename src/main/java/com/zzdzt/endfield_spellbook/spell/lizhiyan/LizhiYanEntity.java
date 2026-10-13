@@ -576,6 +576,17 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         return targeting;
     }
 
+    /**
+     * Coordinated-blast barrier: every sibling must be in the blast sequence and at its
+     * own locked firing position before the volley begins.
+     */
+    boolean allAtBlastPositions(LivingEntity owner) {
+        for (LizhiYanEntity sword : getSiblingSwords()) {
+            if (!sword.swordReadyAndAtPos(owner)) return false;
+        }
+        return swordReadyAndAtPos(owner);
+    }
+
     /** Formation-controller bridge: whether this sword has reached its locked firing position. */
     boolean swordReadyAndAtPos(LivingEntity owner) {
         return formation.swordReadyAndAtPos(owner);
