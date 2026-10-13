@@ -176,12 +176,10 @@ public final class WindArrowVfxRenderer {
             float impactAge = age - 3.0f;
             drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WIND_ARROW_IMPACT),
                 0, entity.distance, 0, impactAge, false);
-            drawArrowImpact(poseStack, glow, 0, entity.distance, 0, impactAge, false);
         } else if (style == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_FINAL_HIT && age >= 3.0f) {
             float impactAge = age - 3.0f;
             drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WIND_ARROW_IMPACT_FINAL),
                 0, entity.distance, 0, impactAge, true);
-            drawArrowImpact(poseStack, glow, 0, entity.distance, 0, impactAge, true);
         }
 
         poseStack.popPose();
@@ -693,48 +691,6 @@ public final class WindArrowVfxRenderer {
             red, green, blue, alpha, 0.0f, 0.0f, 1.0f);
     }
 
-    private static void drawArrowImpact(PoseStack poseStack, VertexConsumer consumer,
-                                        float cx, float cy, float cz, float impactAge,
-                                        boolean finalBurst) {
-        float duration = finalBurst ? 5.5f : 3.0f;
-        float t = Mth.clamp(impactAge / duration, 0.0f, 1.0f);
-        float eased = t * t * (3.0f - 2.0f * t);
-        float alpha = (finalBurst ? 1.0f : 0.94f) * (1.0f - t);
-        float radius = finalBurst ? 0.15f + eased * 1.62f : 0.08f + eased * 0.62f;
-        float tube = finalBurst ? 0.034f : 0.022f;
-
-        // 蓝色扩张外缘 + 蓝白内环，普通命中短促，最后一击的放射规模明显更大。
-        drawTorus(poseStack, consumer, cx, cy, cz, radius, tube * 1.7f, 0,
-            0.06f, 0.23f, 1.0f, alpha * 0.66f, 22, 5);
-        drawTorus(poseStack, consumer, cx, cy, cz, radius, tube, 0,
-            0.64f, 0.82f, 1.0f, alpha, 22, 4);
-        drawTorus(poseStack, consumer, cx, cy, cz, radius * 0.78f, tube * 0.62f, 1,
-            0.82f, 0.91f, 1.0f, alpha * 0.72f, 20, 4);
-        if (finalBurst) {
-            drawTorus(poseStack, consumer, cx, cy, cz, radius * 0.60f, tube * 0.54f, 2,
-                0.38f, 0.61f, 1.0f, alpha * 0.78f, 20, 4);
-        }
-
-        int rayCount = finalBurst ? 20 : 9;
-        float startRadius = finalBurst ? radius * 0.12f : radius * 0.46f;
-        float endRadius = finalBurst ? radius * 1.22f : radius * 0.96f;
-        for (int i = 0; i < rayCount; i++) {
-            float ny = 1.0f - 2.0f * ((i + 0.5f) / rayCount);
-            float ring = (float) Math.sqrt(Math.max(0.0f, 1.0f - ny * ny));
-            float theta = i * 2.3999632f + 0.37f;
-            float nx = ring * (float) Math.cos(theta);
-            float nz = ring * (float) Math.sin(theta);
-            Vec3 start = new Vec3(cx + nx * startRadius, cy + ny * startRadius, cz + nz * startRadius);
-            Vec3 end = new Vec3(cx + nx * endRadius, cy + ny * endRadius, cz + nz * endRadius);
-            float rayAlpha = alpha * (finalBurst ? 0.92f : 0.72f);
-            drawTubeSegment(poseStack, consumer, start, end,
-                finalBurst ? 0.022f : 0.014f,
-                finalBurst ? 0.26f : 0.42f,
-                finalBurst ? 0.48f : 0.68f,
-                1.0f, rayAlpha, 5);
-        }
-    }
-
     private static void drawTaperedCylinderY(PoseStack poseStack, VertexConsumer consumer,
                                               float length, float radius,
                                               float red, float green, float blue, float alpha,
@@ -798,72 +754,6 @@ public final class WindArrowVfxRenderer {
     }
 
     /** plane=0: normal Y; plane=1: normal X; plane=2: normal Z. */
-    private static void drawTorus(PoseStack poseStack, VertexConsumer consumer,
-                                  float cx, float cy, float cz,
-                                  float radius, float tubeRadius, int plane,
-                                  float red, float green, float blue, float alpha,
-                                  int majorSegments, int tubeSegments) {
-        PoseStack.Pose pose = poseStack.last();
-        for (int i = 0; i < majorSegments; i++) {
-            double theta0 = Math.PI * 2.0 * i / majorSegments;
-            double theta1 = Math.PI * 2.0 * (i + 1) / majorSegments;
-            for (int j = 0; j < tubeSegments; j++) {
-                double phi0 = Math.PI * 2.0 * j / tubeSegments;
-                double phi1 = Math.PI * 2.0 * (j + 1) / tubeSegments;
-                emitTorusVertex(pose, consumer, cx, cy, cz, radius, tubeRadius, plane,
-                    theta0, phi0, (float) i / majorSegments, (float) j / tubeSegments,
-                    red, green, blue, alpha);
-                emitTorusVertex(pose, consumer, cx, cy, cz, radius, tubeRadius, plane,
-                    theta1, phi0, (float) (i + 1) / majorSegments, (float) j / tubeSegments,
-                    red, green, blue, alpha);
-                emitTorusVertex(pose, consumer, cx, cy, cz, radius, tubeRadius, plane,
-                    theta1, phi1, (float) (i + 1) / majorSegments, (float) (j + 1) / tubeSegments,
-                    red, green, blue, alpha);
-                emitTorusVertex(pose, consumer, cx, cy, cz, radius, tubeRadius, plane,
-                    theta0, phi1, (float) i / majorSegments, (float) (j + 1) / tubeSegments,
-                    red, green, blue, alpha);
-            }
-        }
-    }
-
-    private static void emitTorusVertex(PoseStack.Pose pose, VertexConsumer consumer,
-                                        float cx, float cy, float cz,
-                                        float radius, float tubeRadius, int plane,
-                                        double theta, double phi, float u, float v,
-                                        float red, float green, float blue, float alpha) {
-        double radial = radius + tubeRadius * Math.cos(phi);
-        double tube = tubeRadius * Math.sin(phi);
-        float x;
-        float y;
-        float z;
-        float nx;
-        float ny;
-        float nz;
-        if (plane == 0) {
-            x = cx + (float) (radial * Math.cos(theta));
-            y = cy + (float) tube;
-            z = cz + (float) (radial * Math.sin(theta));
-            nx = (float) (Math.cos(phi) * Math.cos(theta));
-            ny = (float) Math.sin(phi);
-            nz = (float) (Math.cos(phi) * Math.sin(theta));
-        } else if (plane == 1) {
-            x = cx + (float) tube;
-            y = cy + (float) (radial * Math.cos(theta));
-            z = cz + (float) (radial * Math.sin(theta));
-            nx = (float) Math.sin(phi);
-            ny = (float) (Math.cos(phi) * Math.cos(theta));
-            nz = (float) (Math.cos(phi) * Math.sin(theta));
-        } else {
-            x = cx + (float) (radial * Math.cos(theta));
-            y = cy + (float) (radial * Math.sin(theta));
-            z = cz + (float) tube;
-            nx = (float) (Math.cos(phi) * Math.cos(theta));
-            ny = (float) (Math.cos(phi) * Math.sin(theta));
-            nz = (float) Math.sin(phi);
-        }
-        emitVertex(pose, consumer, x, y, z, u, v, red, green, blue, alpha, nx, ny, nz);
-    }
-
     private static void drawTubeSegment(PoseStack poseStack, VertexConsumer consumer,
                                         Vec3 start, Vec3 end, float radius,
                                         float red, float green, float blue, float alpha,
