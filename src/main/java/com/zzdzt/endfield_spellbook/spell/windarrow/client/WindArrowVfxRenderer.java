@@ -70,6 +70,12 @@ public final class WindArrowVfxRenderer {
         EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
             "wind_arrow_shards", TEXTURE_WIND_ARROW_SHARDS, false);
 
+    private static final ResourceLocation TEXTURE_WIND_ARROW_HEAD =
+        ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_head.png");
+    private static final RenderType WIND_ARROW_HEAD =
+        EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
+            "wind_arrow_head", TEXTURE_WIND_ARROW_HEAD, false);
+
     private WindArrowVfxRenderer() {
     }
 
@@ -149,12 +155,15 @@ public final class WindArrowVfxRenderer {
         renderWindArrowSprites(poseStack, sprites, shards, visibleLength, age, arcAlpha, trailAlpha);
         renderWindArrowAfterglow(poseStack, glow, sprites, visibleLength, age, trailAlpha);
 
-        // 箭矢前锋：真正具有方向性的尖锐箭头 + 中心星芒。
-        // 旧实现只有四角星作为前锋，远距离时容易被误读成普通光束。
+        // 箭矢前锋：几何楔形保持体积感，专用晶体贴图补足白芯、切面和锐利边缘。
+        // 多方向交叉的纹理面让前锋从侧视角仍有形状；只调整视觉，不参与碰撞与命中。
         drawWindArrowHead(poseStack, glow, visibleLength, age, beamAlpha);
-        drawWindArrowSprite(poseStack, sprites, 0.0f, visibleLength, 0.0f,
-            0.052f, 0.082f, 2, age * 21.0f,
-            0.96f, 0.99f, 1.0f, beamAlpha * 0.72f);
+        VertexConsumer arrowHead = bufferSource.getBuffer(WIND_ARROW_HEAD);
+        drawWindArrowHeadTexture(poseStack, arrowHead, 0.0f, visibleLength, 0.004f, age, beamAlpha);
+        // 中心星芒降为较小的尖端高光，避免盖过箭头轮廓。
+        drawWindArrowSprite(poseStack, sprites, 0.0f, visibleLength, 0.008f,
+            0.034f, 0.047f, 2, age * 21.0f,
+            0.96f, 0.99f, 1.0f, beamAlpha * 0.48f);
 
         int style = entity.getVisualStyle();
         if (style == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_HIT && age >= 3.0f) {
@@ -170,6 +179,35 @@ public final class WindArrowVfxRenderer {
         }
 
         poseStack.popPose();
+    }
+
+    /**
+     * 绘制箭头前锋的专用晶体图集。贴图尖端与局部 +Y 对齐，沿飞行轴旋转三张面，
+     * 叠在几何楔形上形成正视与侧视均可辨识的白色核心、冷蓝切面和锐利轮廓。
+     */
+    private static void drawWindArrowHeadTexture(PoseStack poseStack, VertexConsumer consumer,
+                                                  float cx, float tipY, float cz,
+                                                  float age, float alpha) {
+        if (alpha <= 0.001f) {
+            return;
+        }
+
+        float pulse = 0.94f + 0.06f * Mth.sin(age * 1.7f);
+        float halfWidth = 0.215f * pulse;
+        float halfHeight = 0.285f * pulse;
+        // 图案顶部的透明边距很小；略向前补偿，让纹理尖端贴合几何箭头顶点。
+        float centerY = tipY - halfHeight + 0.018f;
+
+        for (int plane = 0; plane < 3; plane++) {
+            poseStack.pushPose();
+            poseStack.translate(cx, centerY, cz);
+            poseStack.mulPose(Axis.YP.rotationDegrees(plane * 60.0f + age * 2.5f));
+            drawWindArrowSpriteAtOrigin(poseStack, consumer,
+                halfWidth, halfHeight, plane == 0 ? 0 : 1,
+                0.90f, 0.97f, 1.0f,
+                alpha * (plane == 0 ? 0.92f : 0.58f));
+            poseStack.popPose();
+        }
     }
 
     /**
