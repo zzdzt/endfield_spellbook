@@ -124,12 +124,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     private int returnTick = 0;
 
-    @Nullable Vec3 blastLockedDirection;
-    // 协同光束站位锁定：进 BLAST_READY 时锁定一次，之后不随玩家移动漂移，
-    // 否则 closeTo 判定永远追不上移动目标 → 各自超时错峰发射
+    // 协同光束站位锁仍由实体持有：它与实际位置/飞行逻辑紧密耦合。
     @Nullable Vec3 blastReadyPos;
-    // 三剑全部就位后的聚气停留计数（barrier 通过后递增，到 BLAST_CHARGE_TICKS 才发射）
-    int blastReadyHold;
 
     // 方向缓存
     private float currentYaw = 0f;
@@ -182,6 +178,11 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     void setAttackPhaseTick(int value) { attackController.setPhaseTick(value); }
     void setAttackIndex(int value) { attackController.setAttackIndex(value); }
     void incrementAttackIndex() { attackController.incrementAttackIndex(); }
+    @Nullable Vec3 getBlastLockedDirection() { return attackController.blastLockedDirection(); }
+    void setBlastLockedDirection(@Nullable Vec3 value) { attackController.setBlastLockedDirection(value); }
+    int getBlastReadyHold() { return attackController.blastReadyHold(); }
+    void incrementBlastReadyHold() { attackController.incrementBlastReadyHold(); }
+    void resetBlastReadyHold() { attackController.resetBlastReadyHold(); }
     int getSpinTicksForController() { return spinTicks; }
     void setChargeScaleSynced(float value) { entityData.set(CHARGE_SCALE, value); }
     void resetThrustDamageState() { thrustController.resetDamageState(); }
@@ -425,7 +426,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         if (getAttackIndex() >= 2) {
             setAttackPhaseState(Phase.BLAST_READY);
             setAttackPhaseTick(0);
-            blastReadyHold = 0;
+            resetBlastReadyHold();
             returnTick = 0;
         } else {
             returnTick = RETURN_TICKS;
@@ -544,7 +545,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     void startBlastReady() {
         setAttackPhaseState(Phase.BLAST_READY);
         setAttackPhaseTick(0);
-        blastReadyHold = 0;
+        resetBlastReadyHold();
         entityData.set(CHARGE_SCALE, 1.0f);
     }
 
@@ -713,7 +714,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     private Vec3 getTargetDirection() {
-        if (blastLockedDirection != null) return blastLockedDirection;
+        if (getBlastLockedDirection() != null) return getBlastLockedDirection();
         if (targeting.getCurrentTarget() != null) {
             Vec3 tc = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
             return tc.subtract(position()).normalize();
