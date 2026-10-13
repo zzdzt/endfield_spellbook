@@ -654,9 +654,11 @@ public final class WindArrowVfxRenderer {
         float t = Mth.clamp(impactAge / duration, 0.0f, 1.0f);
         float eased = t * t * (3.0f - 2.0f * t);
         float fade = 1.0f - t;
-        float size = finalBurst ? 0.30f + eased * 1.18f : 0.14f + eased * 0.43f;
-        float outerAlpha = fade * (finalBurst ? 0.48f : 0.30f);
-        float coreAlpha = fade * (finalBurst ? 0.82f : 0.56f);
+        // 普通命中之前尺寸偏小，纹理的大部分透明边距又进一步削弱了视觉面积。
+        // 提高首帧尺寸与白芯强度，让普通命中一开始就可读；终结爆闪仍维持更大尺度。
+        float size = finalBurst ? 0.30f + eased * 1.18f : 0.28f + eased * 0.72f;
+        float outerAlpha = fade * (finalBurst ? 0.48f : 0.56f);
+        float coreAlpha = fade * (finalBurst ? 0.82f : 0.94f);
 
         for (int plane = 0; plane < 3; plane++) {
             poseStack.pushPose();
