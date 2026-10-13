@@ -111,9 +111,6 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     private final LizhiYanMovementController movement = new LizhiYanMovementController(this);
     private final LizhiYanAttackController attackController = new LizhiYanAttackController(this);
 
-    Phase phase = Phase.IDLE;
-    int phaseTick = 0;
-    int attackIndex = 0;
 
     // 位置缓存
     private Vec3 formationPos = Vec3.ZERO;
@@ -178,6 +175,13 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     
     /** Narrow package-level bridges used by the attack-state controller. */
     LizhiYanTargeting targetingController() { return targeting; }
+    LizhiYanEntity.Phase getAttackPhaseState() { return attackController.phase(); }
+    int getAttackPhaseTick() { return attackController.phaseTick(); }
+    int getAttackIndex() { return attackController.attackIndex(); }
+    void setAttackPhaseState(Phase value) { attackController.setPhase(value); }
+    void setAttackPhaseTick(int value) { attackController.setPhaseTick(value); }
+    void setAttackIndex(int value) { attackController.setAttackIndex(value); }
+    void incrementAttackIndex() { attackController.incrementAttackIndex(); }
     int getSpinTicksForController() { return spinTicks; }
     void setChargeScaleSynced(float value) { entityData.set(CHARGE_SCALE, value); }
     void resetThrustDamageState() { thrustController.resetDamageState(); }
@@ -216,14 +220,14 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         if (tag.contains("Slot")) slotIndex = tag.getInt("Slot");
         if (tag.contains("BaseDamage")) baseDamage = tag.getFloat("BaseDamage");
         if (tag.contains("Range")) range = tag.getFloat("Range");
-        if (tag.contains("AttackIndex")) attackIndex = tag.getInt("AttackIndex");
+        if (tag.contains("AttackIndex")) setAttackIndex(tag.getInt("AttackIndex"));
     }
     @Override protected void addAdditionalSaveData(@NotNull CompoundTag tag) {
         if (ownerUUID != null) tag.putUUID("Owner", ownerUUID);
         tag.putInt("Slot", slotIndex);
         tag.putFloat("BaseDamage", baseDamage);
         tag.putFloat("Range", range);
-        tag.putInt("AttackIndex", attackIndex);
+        tag.putInt("AttackIndex", getAttackIndex());
     }
 
     /** Movement-controller bridge for Entity's protected impulse flag. */
@@ -303,9 +307,9 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
         if (returnTick > 0) { updateReturnToFormation(owner); syncStateToClient(); return; }
         if (thrustController.isActive()) { thrustController.tick(); }
-        else if (phase == Phase.SPIN) { updateSpin(owner); }
-        else if (phase == Phase.BLAST_READY) { updateBlastReadyPosition(owner); }
-        else if (phase == Phase.BLAST || phase == Phase.BLAST_DELAY) { holdBlastPosition(owner); }
+        else if (getAttackPhaseState() == Phase.SPIN) { updateSpin(owner); }
+        else if (getAttackPhaseState() == Phase.BLAST_READY) { updateBlastReadyPosition(owner); }
+        else if (getAttackPhaseState() == Phase.BLAST || getAttackPhaseState() == Phase.BLAST_DELAY) { holdBlastPosition(owner); }
         else { updateFormationPosition(owner); }
 
         targeting.update(owner, range);
@@ -407,8 +411,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     /** 控制器回调：进入 STAB 主阶段。 */
     void beginThrustPhase() {
-        phase = Phase.STAB;
-        phaseTick = 0;
+        setAttackPhaseState(Phase.STAB);
+        setAttackPhaseTick(0);
     }
 
     void setThrustingSynced(boolean value) {
@@ -417,21 +421,21 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     /** 穿刺结束后沿用原有回编队 / 协同齐射转换逻辑。 */
     void onThrustFinished() {
-        attackIndex++;
-        if (attackIndex >= 2) {
-            phase = Phase.BLAST_READY;
+        incrementAttackIndex();
+        if (getAttackIndex() >= 2) {
+            setAttackPhaseState(Phase.BLAST_READY);
             phaseTick = 0;
             blastReadyHold = 0;
             returnTick = 0;
         } else {
             returnTick = RETURN_TICKS;
-            phase = Phase.COOLDOWN;
+            setAttackPhaseState(Phase.COOLDOWN);
             phaseTick = 0;
         }
     }
 
     void returnToIdleAfterMissingThrustTarget() {
-        phase = Phase.IDLE;
+        setAttackPhaseState(Phase.IDLE);
         phaseTick = 0;
     }
 
@@ -485,7 +489,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     private void updateSpin(LivingEntity owner) {
-        double progress = phaseTick / (double) spinTicks;
+        double progress = getAttackPhaseTick() / (double) spinTicks;
 
         double baseAngle = slotIndex * (2 * Math.PI / 3);
         double spinAngle = baseAngle - progress * 2 * Math.PI;
@@ -528,7 +532,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         LivingEntity owner = getOwner();
         if (owner == null) return;
         float multiplier = STAB_DAMAGE_MULTIPLIERS[
-            Math.min(attackIndex, STAB_DAMAGE_MULTIPLIERS.length - 1)];
+            Math.min(getAttackIndex(), STAB_DAMAGE_MULTIPLIERS.length - 1)];
         float damage = baseDamage * multiplier;
         // 官方模式（EchoingArrowProjectile）：直接从 registry 取法术引用构造伤害来源
         var spell = SpellRegistry.LIZHI_YAN.get();
@@ -554,8 +558,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     /** 仅在初始索敌 / 首轮蓄力窗口内允许同步整组目标。 */
     boolean isInitialTargetAcquisitionWindow() {
-        return attackIndex == 0
-            && (phase == Phase.IDLE || (phase == Phase.CHARGE && phaseTick <= CHARGE_TICKS_STAB));
+        return getAttackIndex() == 0
+            && (getAttackPhaseState() == Phase.IDLE || (getAttackPhaseState() == Phase.CHARGE && getAttackPhaseTick() <= CHARGE_TICKS_STAB));
     }
 
     /** Targeting controller bridge: same-owner sword group. */
@@ -618,7 +622,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     private boolean swordReadyAndAtPos(LivingEntity owner) {
-        Phase p = phase;
+        Phase p = getAttackPhaseState();
         // 已发射 / 后摇中的剑（BLAST、BLAST_DELAY、SPIN）：不再做就位判定。
         // ⚠️ 关键：startBlast 后剑会离开齐射站位，若仍要求 closeTo，其余剑会判定它"未就位"
         // 而一直卡到超时 —— 这正是"一把先射、另两把苦等一段时间"的根因。
@@ -719,7 +723,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
 
     // 状态同步
     private void syncStateToClient() {
-        int phaseId = phase.ordinal();
+        int phaseId = getAttackPhaseState().ordinal();
         if (phaseId != entityData.get(ATTACK_PHASE)) {
             entityData.set(ATTACK_PHASE, phaseId);
         }
