@@ -565,43 +565,6 @@ public final class WindArrowVfxRenderer {
         }
     }
 
-    /** 将 wind_arrow_needle 的原始横向光痕映射为沿 +Y 方向的渐缩贴图光带。 */
-    private static void drawNeedleRibbonY(PoseStack poseStack, VertexConsumer consumer,
-                                          float length, float halfWidth, float rotationDegrees,
-                                          float red, float green, float blue, float alpha) {
-        if (length <= 0.01f || alpha <= 0.001f) {
-            return;
-        }
-
-        poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(rotationDegrees));
-        PoseStack.Pose pose = poseStack.last();
-        int longitudinalSegments = Mth.clamp((int) Math.ceil(length * 1.4f), 12, 48);
-
-        for (int i = 0; i < longitudinalSegments; i++) {
-            float t0 = i / (float) longitudinalSegments;
-            float t1 = (i + 1) / (float) longitudinalSegments;
-            float y0 = length * t0;
-            float y1 = length * t1;
-            float taper0 = beamRadiusProfile(t0);
-            float taper1 = beamRadiusProfile(t1);
-            float a0 = alpha * beamOpacityProfile(t0);
-            float a1 = alpha * beamOpacityProfile(t1);
-            float x0 = halfWidth * taper0;
-            float x1 = halfWidth * taper1;
-
-            emitVertex(pose, consumer, -x0, y0, 0.0f, t0, 1,
-                red, green, blue, a0, 0, 0, 1);
-            emitVertex(pose, consumer, x0, y0, 0.0f, t0, 0,
-                red, green, blue, a0, 0, 0, 1);
-            emitVertex(pose, consumer, x1, y1, 0.0f, t1, 0,
-                red, green, blue, a1, 0, 0, 1);
-            emitVertex(pose, consumer, -x1, y1, 0.0f, t1, 1,
-                red, green, blue, a1, 0, 0, 1);
-        }
-        poseStack.popPose();
-    }
-
     /** 沿弹道轴放置一张横向旋转的星芒/碎片贴图。 */
     private static void drawWindArrowSprite(PoseStack poseStack, VertexConsumer consumer,
                                             float cx, float cy, float cz,
@@ -691,63 +654,6 @@ public final class WindArrowVfxRenderer {
             red, green, blue, alpha, 0.0f, 0.0f, 1.0f);
         emitVertex(pose, consumer, -size, size, 0.0f, 0.0f, 0.0f,
             red, green, blue, alpha, 0.0f, 0.0f, 1.0f);
-    }
-
-    private static void drawTaperedCylinderY(PoseStack poseStack, VertexConsumer consumer,
-                                              float length, float radius,
-                                              float red, float green, float blue, float alpha,
-                                              int radialSegments) {
-        if (length <= 0.001f || radius <= 0.001f || alpha <= 0.001f) {
-            return;
-        }
-
-        PoseStack.Pose pose = poseStack.last();
-        int longitudinalSegments = Mth.clamp((int) Math.ceil(length * 1.35f), 12, 44);
-
-        for (int j = 0; j < longitudinalSegments; j++) {
-            float t0 = j / (float) longitudinalSegments;
-            float t1 = (j + 1) / (float) longitudinalSegments;
-            float y0 = length * t0;
-            float y1 = length * t1;
-            float r0 = radius * beamRadiusProfile(t0);
-            float r1 = radius * beamRadiusProfile(t1);
-            float a0 = alpha * beamOpacityProfile(t0);
-            float a1 = alpha * beamOpacityProfile(t1);
-
-            for (int i = 0; i < radialSegments; i++) {
-                double angle0 = Math.PI * 2.0 * i / radialSegments;
-                double angle1 = Math.PI * 2.0 * (i + 1) / radialSegments;
-                float c0 = (float) Math.cos(angle0);
-                float s0 = (float) Math.sin(angle0);
-                float c1 = (float) Math.cos(angle1);
-                float s1 = (float) Math.sin(angle1);
-
-                emitVertex(pose, consumer, c0 * r0, y0, s0 * r0,
-                    t0, (float) i / radialSegments, red, green, blue, a0,
-                    c0, 0, s0);
-                emitVertex(pose, consumer, c1 * r0, y0, s1 * r0,
-                    t0, (float) (i + 1) / radialSegments, red, green, blue, a0,
-                    c1, 0, s1);
-                emitVertex(pose, consumer, c1 * r1, y1, s1 * r1,
-                    t1, (float) (i + 1) / radialSegments, red, green, blue, a1,
-                    c1, 0, s1);
-                emitVertex(pose, consumer, c0 * r1, y1, s0 * r1,
-                    t1, (float) i / radialSegments, red, green, blue, a1,
-                    c0, 0, s0);
-            }
-        }
-    }
-
-    /** 先保持主体直径稳定，靠近前端时快速收尖；比平头长柱更接近光矢的针状轮廓。 */
-    private static float beamRadiusProfile(float t) {
-        float tipTaper = 1.0f - 0.82f * smoothstep(0.80f, 1.0f, t);
-        float body = 0.82f + 0.18f * Mth.sin(t * (float) Math.PI);
-        return Math.max(0.12f, body * tipTaper);
-    }
-
-    /** 光束尾端略暗、尖端保持高亮；材质本身再提供横向柔化。 */
-    private static float beamOpacityProfile(float t) {
-        return Mth.clamp(0.52f + 0.34f * t + 0.14f * Mth.sin(t * (float) Math.PI), 0.0f, 1.0f);
     }
 
     private static float smoothstep(float edge0, float edge1, float x) {
