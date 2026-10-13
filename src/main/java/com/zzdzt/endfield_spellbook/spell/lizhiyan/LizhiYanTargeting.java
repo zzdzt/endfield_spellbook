@@ -103,6 +103,63 @@ final class LizhiYanTargeting {
                 currentTarget = findNearestEnemy(owner, range);
             }
         }
+
+        // 初次释放阶段由整组飞剑共享一个目标，避免各剑按自身位置独立扫描后错开攻击。
+        synchronizeInitialSquadTarget();
+    }
+
+
+    /**
+     * 在初始索敌窗口内，将同一施法者的飞剑统一到一个目标。
+     * 玩家最近攻击目标（pendingTarget）优先于独立扫描结果；
+     * 同类候选按 slotIndex 排序，确保所有实体看到同一结果。
+     */
+    private void synchronizeInitialSquadTarget() {
+        if (!sword.isInitialTargetAcquisitionWindow()) return;
+
+        var group = new java.util.ArrayList<>(sword.getSiblingSwordsForTargeting());
+        group.add(sword);
+        group.sort(java.util.Comparator.comparingInt(LizhiYanEntity::getSlotIndex));
+
+        Entity sharedPending = null;
+        Entity sharedCurrent = null;
+        for (LizhiYanEntity member : group) {
+            if (!member.isInitialTargetAcquisitionWindow()) continue;
+            LizhiYanTargeting memberTargeting = member.getTargetingForCoordination();
+            Entity pending = memberTargeting.pendingTarget;
+            if (isValidTarget(pending)) {
+                sharedPending = pending;
+                break;
+            }
+        }
+
+        if (sharedPending == null) {
+            for (LizhiYanEntity member : group) {
+                if (!member.isInitialTargetAcquisitionWindow()) continue;
+                LizhiYanTargeting memberTargeting = member.getTargetingForCoordination();
+                Entity current = memberTargeting.currentTarget;
+                if (isValidTarget(current)) {
+                    sharedCurrent = current;
+                    break;
+                }
+            }
+        }
+
+        Entity shared = sharedPending != null ? sharedPending : sharedCurrent;
+        if (shared == null) return;
+
+        // 初始目标确定后统一为 currentTarget，让三剑同一轮进入 CHARGE。
+        for (LizhiYanEntity member : group) {
+            if (!member.isInitialTargetAcquisitionWindow()) continue;
+            LizhiYanTargeting memberTargeting = member.getTargetingForCoordination();
+            memberTargeting.currentTarget = shared;
+            memberTargeting.pendingTarget = null;
+            memberTargeting.lostSightTick = 0;
+        }
+    }
+
+    private boolean isValidTarget(@Nullable Entity target) {
+        return target instanceof LivingEntity && target.isAlive() && !target.isRemoved();
     }
 
     @Nullable
