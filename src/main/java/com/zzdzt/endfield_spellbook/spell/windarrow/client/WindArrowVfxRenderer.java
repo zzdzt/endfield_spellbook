@@ -58,6 +58,12 @@ public final class WindArrowVfxRenderer {
         EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
             "wind_arrow_impact", TEXTURE_WIND_ARROW_IMPACT, false);
 
+    private static final ResourceLocation TEXTURE_WIND_ARROW_IMPACT_FINAL =
+        ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_impact_final.png");
+    private static final RenderType WIND_ARROW_IMPACT_FINAL =
+        EndfieldRenderTypes.entityAdditiveGlowNoCullLinearParticles(
+            "wind_arrow_impact_final", TEXTURE_WIND_ARROW_IMPACT_FINAL, false);
+
     private static final ResourceLocation TEXTURE_WIND_ARROW_SPRITES =
         ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "textures/vfx/wind_arrow_star_glint.png");
     private static final RenderType WIND_ARROW_SPRITES =
@@ -173,7 +179,7 @@ public final class WindArrowVfxRenderer {
             drawArrowImpact(poseStack, glow, 0, entity.distance, 0, impactAge, false);
         } else if (style == LizhiYanBlastVisualEntity.STYLE_WIND_ARROW_FINAL_HIT && age >= 3.0f) {
             float impactAge = age - 3.0f;
-            drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WIND_ARROW_IMPACT),
+            drawArrowImpactTexture(poseStack, bufferSource.getBuffer(WIND_ARROW_IMPACT_FINAL),
                 0, entity.distance, 0, impactAge, true);
             drawArrowImpact(poseStack, glow, 0, entity.distance, 0, impactAge, true);
         }
