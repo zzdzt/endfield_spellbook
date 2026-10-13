@@ -17,6 +17,7 @@ final class LizhiYanAttackController {
     private int phaseTick;
     private int attackIndex;
     @Nullable private Vec3 blastLockedDirection;
+    @Nullable private Vec3 blastReadyPos;
     private int blastReadyHold;
 
     LizhiYanAttackController(LizhiYanEntity entity) {
@@ -32,6 +33,8 @@ final class LizhiYanAttackController {
     void incrementAttackIndex() { attackIndex++; }
     @Nullable Vec3 blastLockedDirection() { return blastLockedDirection; }
     void setBlastLockedDirection(@Nullable Vec3 value) { blastLockedDirection = value; }
+    @Nullable Vec3 blastReadyPos() { return blastReadyPos; }
+    void setBlastReadyPos(@Nullable Vec3 value) { blastReadyPos = value; }
     int blastReadyHold() { return blastReadyHold; }
     void incrementBlastReadyHold() { blastReadyHold++; }
     void resetBlastReadyHold() { blastReadyHold = 0; }
@@ -124,7 +127,7 @@ final class LizhiYanAttackController {
                     phase = LizhiYanEntity.Phase.COOLDOWN;
                     phaseTick = 0;
                     // Release the firing-position lock and charge counter for the next cycle.
-                    entity.blastReadyPos = null;
+                    blastReadyPos = null;
                     blastReadyHold = 0;
                 }
                 break;
