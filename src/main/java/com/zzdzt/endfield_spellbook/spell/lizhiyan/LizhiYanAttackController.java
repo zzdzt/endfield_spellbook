@@ -12,54 +12,65 @@ import net.minecraft.world.phys.Vec3;
  */
 final class LizhiYanAttackController {
     private final LizhiYanEntity entity;
+    private LizhiYanEntity.Phase phase = LizhiYanEntity.Phase.IDLE;
+    private int phaseTick;
+    private int attackIndex;
 
     LizhiYanAttackController(LizhiYanEntity entity) {
         this.entity = entity;
     }
 
+    LizhiYanEntity.Phase phase() { return phase; }
+    int phaseTick() { return phaseTick; }
+    int attackIndex() { return attackIndex; }
+    void setPhase(LizhiYanEntity.Phase value) { phase = value; }
+    void setPhaseTick(int value) { phaseTick = value; }
+    void setAttackIndex(int value) { attackIndex = Math.max(0, value); }
+    void incrementAttackIndex() { attackIndex++; }
+
     void tick(LivingEntity owner) {
-        switch (entity.phase) {
+        switch (phase) {
             case IDLE:
                 if (entity.targetingController().getPendingTarget() != null
                         && entity.targetingController().getPendingTarget().isAlive()) {
                     entity.targetingController().setCurrentTarget(
                         entity.targetingController().getPendingTarget());
                     entity.targetingController().setPendingTarget(null);
-                    entity.attackIndex = 0;
+                    attackIndex = 0;
                     entity.targetingController().resetLostSightTick();
                 }
 
                 if (entity.targetingController().getCurrentTarget() != null
                         && entity.targetingController().getCurrentTarget().isAlive()) {
-                    entity.phase = LizhiYanEntity.Phase.CHARGE;
-                    entity.phaseTick = 0;
+                    phase = LizhiYanEntity.Phase.CHARGE;
+                    phaseTick = 0;
                     entity.blastLockedDirection = null;
                     entity.resetThrustDamageState();
                 }
                 break;
 
             case CHARGE:
-                entity.phaseTick++;
+                phaseTick++;
                 int chargeThreshold = LizhiYanEntity.CHARGE_TICKS_STAB;
 
                 if (entity.targetingController().getCurrentTarget() != null) {
                     entity.updateAimDirection(owner);
                 }
 
-                if (entity.attackIndex >= 2
+                if (attackIndex >= 2
                         && entity.targetingController().getCurrentTarget() != null) {
                     Vec3 tc = entity.targetingController().getCurrentTarget().position()
                         .add(0, entity.targetingController().getCurrentTarget().getBbHeight() / 2, 0);
                     entity.blastLockedDirection = tc.subtract(entity.position()).normalize();
                 }
 
-                float chargeProgress = entity.phaseTick / (float) chargeThreshold;
+                float chargeProgress = phaseTick / (float) chargeThreshold;
                 float pulse = 1.0f + (float) Math.sin(chargeProgress * Math.PI) * 0.25f;
                 entity.setChargeScaleSynced(pulse);
 
-                if (entity.phaseTick >= chargeThreshold) {
+                if (phaseTick >= chargeThreshold) {
                     entity.setChargeScaleSynced(1.0f);
-                    if (entity.attackIndex < 2) entity.startStab();
+                    if (attackIndex < 2) entity.startStab();
                     else entity.startBlastReady();
                 }
                 break;
@@ -86,8 +97,8 @@ final class LizhiYanAttackController {
                 break;
 
             case BLAST:
-                entity.phase = LizhiYanEntity.Phase.BLAST_DELAY;
-                entity.phaseTick = 0;
+                phase = LizhiYanEntity.Phase.BLAST_DELAY;
+                phaseTick = 0;
                 break;
 
             case BLAST_DELAY:
@@ -101,7 +112,7 @@ final class LizhiYanAttackController {
             case SPIN:
                 entity.phaseTick++;
                 if (entity.phaseTick >= entity.getSpinTicksForController()) {
-                    entity.attackIndex = 0;
+                    attackIndex = 0;
                     entity.phase = LizhiYanEntity.Phase.COOLDOWN;
                     entity.phaseTick = 0;
                     // Release the firing-position lock and charge counter for the next cycle.
@@ -112,7 +123,7 @@ final class LizhiYanAttackController {
 
             case COOLDOWN:
                 entity.phaseTick++;
-                int cooldown = entity.attackIndex == 0
+                int cooldown = attackIndex == 0
                     ? LizhiYanEntity.COOLDOWN_TICKS_BLAST
                     : LizhiYanEntity.COOLDOWN_TICKS_STAB;
 
