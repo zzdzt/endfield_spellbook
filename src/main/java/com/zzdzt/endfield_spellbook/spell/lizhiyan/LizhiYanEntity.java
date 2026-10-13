@@ -121,15 +121,8 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     private double lastCosYaw = 1.0, lastSinYaw = 0.0;
     private int lastFormationComputeTick = -1;
 
-    private Vec3 thrustTarget = Vec3.ZERO;
-    private int thrustTick = 0;
-    @Nullable private Vec3 thrustDirection;
-    private boolean hasDealtDamage = false;
-    // 穿刺相位机（参照 YujianCraft 阻尼追踪）：后顿 → 冲刺 → 惯性滑行，物理时长
-    private enum ThrustStage { WINDUP, DASH, THROUGH }
-    @Nullable private ThrustStage thrustStage;
-    @Nullable private Vec3 thrustWaypoint;
-    private int thrustTimeout;
+    // 穿刺子状态与计时由专用控制器持有，实体只负责主攻击阶段与生命周期。
+    private final LizhiYanThrustController thrustController = new LizhiYanThrustController(this);
 
     private int returnTick = 0;
 
@@ -300,7 +293,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         if (owner == null || !owner.isAlive()) { onUnSummon(); return; }
 
         if (returnTick > 0) { updateReturnToFormation(owner); syncStateToClient(); return; }
-        if (thrustTick > 0) { updateThrust(); }
+        if (thrustController.isActive()) { thrustController.tick(); }
         else if (phase == Phase.SPIN) { updateSpin(owner); }
         else if (phase == Phase.BLAST_READY) { updateBlastReadyPosition(owner); }
         else if (phase == Phase.BLAST || phase == Phase.BLAST_DELAY) { holdBlastPosition(owner); }
@@ -411,7 +404,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
                     phase = Phase.CHARGE;
                     phaseTick = 0;
                     blastLockedDirection = null;
-                    hasDealtDamage = false;
+                    thrustController.resetDamageState();
                 }
                 break;
 
@@ -438,10 +431,9 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
                 break;
 
             case STAB:
-                // 穿刺由 tickServer 主循环的 updateThrust 相位机驱动（thrustTick > 0），
-                // 这里只做硬超时兜底：DASH 追不上目标等异常时强制收尾
+                // 控制器驱动穿刺细分阶段；主阶段保留硬超时兜底。
                 phaseTick++;
-                if (phaseTick >= STAB_MAX_TICKS) finishThrust();
+                if (phaseTick >= STAB_MAX_TICKS) thrustController.forceFinish();
                 break;
 
             case BLAST_READY:
@@ -493,12 +485,12 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
                         phase = Phase.CHARGE;
                         phaseTick = 0;
                         blastLockedDirection = null;
-                        hasDealtDamage = false;
+                        thrustController.resetDamageState();
                     } else if (targeting.getCurrentTarget() != null && targeting.getCurrentTarget().isAlive()) {
                         phase = Phase.CHARGE;
                         phaseTick = 0;
                         blastLockedDirection = null;
-                        hasDealtDamage = false;
+                        thrustController.resetDamageState();
                     } else {
                         phase = Phase.IDLE;
                         phaseTick = 0;
@@ -512,66 +504,50 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
     }
 
     // 戳刺（阻尼追踪相位机：后顿 → 冲刺 → 惯性滑行，物理时长，参照 YujianCraft flyToward）
+    // 穿刺细分状态交由专用控制器；实体继续编排主攻击阶段。
     private void startStab() {
-        if (targeting.getCurrentTarget() == null) { phase = Phase.IDLE; phaseTick = 0; return; }
-        phase = Phase.STAB; phaseTick = 0; thrustTick = 1; hasDealtDamage = false;
-        formationPos = position();
-        Vec3 targetCenter = targeting.getCurrentTarget().position().add(0, targeting.getCurrentTarget().getBbHeight()/2, 0);
-        Vec3 toTarget = targetCenter.subtract(formationPos);
-        thrustDirection = toTarget.normalize();
-        thrustTarget = targetCenter;
-        thrustStage = ThrustStage.WINDUP;
-        thrustWaypoint = formationPos.subtract(thrustDirection.scale(0.6)); // 蓄力后拉：向起点后方顿
-        thrustTimeout = 0;
-        entityData.set(IS_THRUSTING, true);
-        level().playSound(null, getX(), getY(), getZ(),
-            SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.3f, 1.5f);
+        thrustController.start();
     }
 
-    private void updateThrust() {
-        if (thrustStage == null) { finishThrust(); return; }
-        switch (thrustStage) {
-            case WINDUP -> {
-                // 蓄力后拉：位置向起点后方顿，但剑尖立即朝目标（turnRate=1.0，
-                // 否则 0.28 + 短持续时间跟不上，剑仍朝上次返回的朝向→视觉上枪尾朝前）
-                flyToward(thrustWaypoint, 0.30, 0.50, thrustDirection, 1.0);
-                if (closeTo(thrustWaypoint, 0.15)) {
-                    thrustStage = ThrustStage.DASH;
-                    thrustTimeout = 0;
-                }
-            }
-            case DASH -> {
-                // 冲刺：目标点实时追踪，全速穿越；剑尖始终朝目标；命中用扫掠判定
-                LivingEntity target = targeting.getCurrentTarget() instanceof LivingEntity living ? living : null;
-                Vec3 aimPoint = (target != null && target.isAlive())
-                        ? target.position().add(0, target.getBbHeight() * 0.55, 0)
-                        : thrustTarget;
-                Vec3 previous = position();
-                flyToward(aimPoint, 0.25, 1.18, aimPoint.subtract(position()).normalize());
-                if (!hasDealtDamage && target != null) {
-                    var box = target.getBoundingBox().inflate(0.3);
-                    if (box.contains(position()) || box.clip(previous, position()).isPresent()) {
-                        applyStabDamage(target);
-                        hasDealtDamage = true;
-                    }
-                }
-                boolean reached = aimPoint.distanceToSqr(position()) < 0.4 * 0.4;
-                if (hasDealtDamage || reached) {
-                    // 惯性滑行：命中后沿当前动量方向滑出去（贯穿是物理延续，非设计过冲点）
-                    Vec3 travel = getDeltaMovement();
-                    if (travel.lengthSqr() < 1e-6) travel = thrustDirection != null ? thrustDirection : new Vec3(0, 0, 1);
-                    thrustWaypoint = position().add(travel.normalize().scale(1.5)).add(0, 0.2, 0);
-                    thrustStage = ThrustStage.THROUGH;
-                } else if (++thrustTimeout > 30) {
-                    finishThrust(); // 追不上，放弃穿刺
-                }
-            }
-            case THROUGH -> {
-                if (thrustWaypoint == null) { finishThrust(); return; }
-                flyToward(thrustWaypoint, 0.14, 0.96);
-                if (closeTo(thrustWaypoint, 0.2)) finishThrust();
-            }
+    /** 控制器回调：进入 STAB 主阶段。 */
+    void beginThrustPhase() {
+        phase = Phase.STAB;
+        phaseTick = 0;
+    }
+
+    void setThrustingSynced(boolean value) {
+        entityData.set(IS_THRUSTING, value);
+    }
+
+    /** 穿刺结束后沿用原有回编队 / 协同齐射转换逻辑。 */
+    void onThrustFinished() {
+        attackIndex++;
+        if (attackIndex >= 2) {
+            phase = Phase.BLAST_READY;
+            phaseTick = 0;
+            blastReadyHold = 0;
+            returnTick = 0;
+        } else {
+            returnTick = RETURN_TICKS;
+            phase = Phase.COOLDOWN;
+            phaseTick = 0;
         }
+    }
+
+    void returnToIdleAfterMissingThrustTarget() {
+        phase = Phase.IDLE;
+        phaseTick = 0;
+    }
+
+    @Nullable
+    LivingEntity currentThrustTarget() {
+        Entity target = targeting.getCurrentTarget();
+        return target instanceof LivingEntity living ? living : null;
+    }
+
+    void playThrustStartSound() {
+        level().playSound(null, getX(), getY(), getZ(),
+            SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.3f, 1.5f);
     }
 
     private void updateReturnToFormation(LivingEntity owner) {
@@ -590,39 +566,17 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         }
     }
 
-    /** 收尾穿刺：第一次穿刺后回编队冷却；第二次穿刺后直接进入协同光束准备（飞向齐射站位）。 */
-    private void finishThrust() {
-        thrustTick = 0;
-        thrustStage = null;
-        thrustWaypoint = null;
-        hasDealtDamage = false;
-        entityData.set(IS_THRUSTING, false);
-        attackIndex++;
-        if (attackIndex >= 2) {
-            // 第二次穿刺完成：直接飞向齐射站位（身后偏左），跳过 COOLDOWN/CHARGE 往返，
-            // 避免"先回编队位 → 再瞬移到身后偏左"的断裂感
-            phase = Phase.BLAST_READY;
-            phaseTick = 0;
-            blastReadyHold = 0;
-            returnTick = 0;
-        } else {
-            returnTick = RETURN_TICKS;
-            phase = Phase.COOLDOWN;
-            phaseTick = 0;
-        }
-    }
-
     // 阻尼运动与朝向计算委托给专用控制器；攻击相位仍由实体持有。
-    private void flyToward(Vec3 destination, double steering, double maxSpeed) {
+    void flyToward(Vec3 destination, double steering, double maxSpeed) {
         movement.flyToward(destination, steering, maxSpeed);
     }
 
-    private void flyToward(Vec3 destination, double steering, double maxSpeed, @Nullable Vec3 facing) {
+    void flyToward(Vec3 destination, double steering, double maxSpeed, @Nullable Vec3 facing) {
         movement.flyToward(destination, steering, maxSpeed, facing);
     }
 
-    private void flyToward(Vec3 destination, double steering, double maxSpeed,
-                           @Nullable Vec3 facing, double turnRate) {
+    void flyToward(Vec3 destination, double steering, double maxSpeed,
+                   @Nullable Vec3 facing, double turnRate) {
         movement.flyToward(destination, steering, maxSpeed, facing, turnRate);
     }
 
@@ -630,7 +584,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         movement.faceDirection(requested, turnRate);
     }
 
-    private boolean closeTo(Vec3 point, double radius) {
+    boolean closeTo(Vec3 point, double radius) {
         return movement.closeTo(point, radius);
     }
 
@@ -674,7 +628,7 @@ public class LizhiYanEntity extends Entity implements IMagicSummon, AntiMagicSus
         setXRot(currentPitch);
     }
 
-    private void applyStabDamage(LivingEntity target) {
+    void applyStabDamage(LivingEntity target) {
         LivingEntity owner = getOwner();
         if (owner == null) return;
         float multiplier = STAB_DAMAGE_MULTIPLIERS[
