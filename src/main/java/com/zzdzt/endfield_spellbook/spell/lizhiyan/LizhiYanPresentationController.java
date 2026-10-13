@@ -27,19 +27,19 @@ final class LizhiYanPresentationController {
 
         if (phase == LizhiYanEntity.Phase.SPIN && entity.tickCount % 3 == 0) {
             entity.level().addParticle(ParticleTypes.ENCHANT,
-                    entity.getX() + (entity.getRandom().nextDouble() - 0.5) * 0.3,
-                    entity.getY() + (entity.getRandom().nextDouble() - 0.5) * 0.3,
-                    entity.getZ() + (entity.getRandom().nextDouble() - 0.5) * 0.3,
-                    (entity.getRandom().nextDouble() - 0.5) * 0.1,
-                    (entity.getRandom().nextDouble() - 0.5) * 0.1,
-                    (entity.getRandom().nextDouble() - 0.5) * 0.1);
+                    entity.getX() + (entity.level().random.nextDouble() - 0.5) * 0.3,
+                    entity.getY() + (entity.level().random.nextDouble() - 0.5) * 0.3,
+                    entity.getZ() + (entity.level().random.nextDouble() - 0.5) * 0.3,
+                    (entity.level().random.nextDouble() - 0.5) * 0.1,
+                    (entity.level().random.nextDouble() - 0.5) * 0.1,
+                    (entity.level().random.nextDouble() - 0.5) * 0.1);
         }
 
         if (thrusting && entity.tickCount % 3 == 0) {
             entity.level().addParticle(ParticleTypes.CRIT,
-                    entity.getX() + (entity.getRandom().nextDouble() - 0.5) * 0.2,
-                    entity.getY() + (entity.getRandom().nextDouble() - 0.5) * 0.2,
-                    entity.getZ() + (entity.getRandom().nextDouble() - 0.5) * 0.2,
+                    entity.getX() + (entity.level().random.nextDouble() - 0.5) * 0.2,
+                    entity.getY() + (entity.level().random.nextDouble() - 0.5) * 0.2,
+                    entity.getZ() + (entity.level().random.nextDouble() - 0.5) * 0.2,
                     0, 0, 0);
         }
 
@@ -52,9 +52,9 @@ final class LizhiYanPresentationController {
     void spawnSummonParticles() {
         for (int i = 0; i < 10; i++) {
             entity.level().addParticle(ParticleTypes.END_ROD,
-                    entity.getX() + (entity.getRandom().nextDouble() - 0.5) * 0.4,
-                    entity.getY() + (entity.getRandom().nextDouble() - 0.5) * 0.4,
-                    entity.getZ() + (entity.getRandom().nextDouble() - 0.5) * 0.4,
+                    entity.getX() + (entity.level().random.nextDouble() - 0.5) * 0.4,
+                    entity.getY() + (entity.level().random.nextDouble() - 0.5) * 0.4,
+                    entity.getZ() + (entity.level().random.nextDouble() - 0.5) * 0.4,
                     0, 0.05, 0);
         }
     }
@@ -62,12 +62,12 @@ final class LizhiYanPresentationController {
     void spawnRemovalParticles() {
         for (int i = 0; i < 12; i++) {
             entity.level().addParticle(ParticleTypes.END_ROD,
-                    entity.getX() + (entity.getRandom().nextDouble() - 0.5),
-                    entity.getY() + (entity.getRandom().nextDouble() - 0.5),
-                    entity.getZ() + (entity.getRandom().nextDouble() - 0.5),
-                    (entity.getRandom().nextDouble() - 0.5) * 0.1,
+                    entity.getX() + (entity.level().random.nextDouble() - 0.5),
+                    entity.getY() + (entity.level().random.nextDouble() - 0.5),
+                    entity.getZ() + (entity.level().random.nextDouble() - 0.5),
+                    (entity.level().random.nextDouble() - 0.5) * 0.1,
                     0.05,
-                    (entity.getRandom().nextDouble() - 0.5) * 0.1);
+                    (entity.level().random.nextDouble() - 0.5) * 0.1);
         }
     }
 }
