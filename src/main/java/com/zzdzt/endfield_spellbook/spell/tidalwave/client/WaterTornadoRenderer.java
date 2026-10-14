@@ -9,7 +9,8 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 水龙卷渲染器：EntityRenderer 接入点，实际绘制委托 {@link TidalWaveVfxRenderer}。
+ * 水龙卷渲染入口。
+ * Entity 生命周期保持不变，视觉组合由 TidalWaveVfxRenderer 管理。
  */
 public class WaterTornadoRenderer extends EntityRenderer<WaterTornadoEntity> {
 
@@ -18,8 +19,7 @@ public class WaterTornadoRenderer extends EntityRenderer<WaterTornadoEntity> {
     }
 
     @Override
-    public boolean shouldRender(WaterTornadoEntity entity, Frustum camera,
-                                double camX, double camY, double camZ) {
+    public boolean shouldRender(WaterTornadoEntity entity, Frustum camera, double camX, double camY, double camZ) {
         return true;
     }
 
@@ -28,7 +28,6 @@ public class WaterTornadoRenderer extends EntityRenderer<WaterTornadoEntity> {
                        PoseStack poseStack, MultiBufferSource bufferSource, int light) {
         TidalWaveVfxRenderer.renderWaterTornado(entity,
             new TidalWaveRenderContext(poseStack, bufferSource, partialTicks));
-        super.render(entity, yaw, partialTicks, poseStack, bufferSource, light);
     }
 
     @Override
