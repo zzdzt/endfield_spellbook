@@ -79,5 +79,12 @@
   "spell.endfield_spellbook.designated_subject.info.rule": "Focused enemies gain an extra stack per infliction; the latest focus overrides the previous one",
   "item.endfield_spellbook.scroll_designated_subject": "Designated Subject Scroll",
   "entity.endfield_spellbook.focus_mark": "Focus Mark",
-  "effect.endfield_spellbook.focused": "Focused"
+  "effect.endfield_spellbook.focused": "Focused",
+
+  "spell.endfield_spellbook.tidal_wave": "Tidal Wave!",
+  "spell.endfield_spellbook.tidal_wave.guide": "Surge forward on a tidal dash that ends in a burst of Cryo damage; each enemy struck leaves a whirlpool at their feet (up to 2). On your next cast, all whirlpools are consumed - after the dash burst, a water tornado erupts at each consumed spot, dealing continuous Cryo damage and applying 1 Cryo infliction stack per target.",
+  "item.endfield_spellbook.scroll_tidal_wave": "Tidal Wave Scroll",
+  "entity.endfield_spellbook.tidal_whirlpool": "Whirlpool",
+  "entity.endfield_spellbook.water_tornado": "Water Tornado",
+  "effect.endfield_spellbook.tidal_wave_dash": "Tidal Dash"
 }

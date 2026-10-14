@@ -79,5 +79,12 @@
   "spell.endfield_spellbook.designated_subject.info.rule": "聚焦的敌人受到附着时自动附加一层；同目标后者覆盖前者",
   "item.endfield_spellbook.scroll_designated_subject": "指定研究对象卷轴",
   "entity.endfield_spellbook.focus_mark": "聚焦标记",
-  "effect.endfield_spellbook.focused": "聚焦"
+  "effect.endfield_spellbook.focused": "聚焦",
+
+  "spell.endfield_spellbook.tidal_wave": "踏潮卷浪！",
+  "spell.endfield_spellbook.tidal_wave.guide": "朝视线方向潮汐突进，冲刺结束时爆发范围寒冷伤害；每命中一名敌人在其位置生成一个涡流（最多 2 个）。再次施放时消耗场上所有涡流，冲刺爆发后在原涡流位置掀起水龙卷，持续造成寒冷伤害并各施加 1 层寒冷附着。",
+  "item.endfield_spellbook.scroll_tidal_wave": "踏潮卷浪卷轴",
+  "entity.endfield_spellbook.tidal_whirlpool": "涡流",
+  "entity.endfield_spellbook.water_tornado": "水龙卷",
+  "effect.endfield_spellbook.tidal_wave_dash": "潮汐突进"
 }

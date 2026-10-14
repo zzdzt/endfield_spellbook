@@ -6,6 +6,7 @@ import com.zzdzt.endfield_spellbook.spell.gloompurge.GloompurgeSpell;
 import com.zzdzt.endfield_spellbook.spell.focus.FocusSpell;
 import com.zzdzt.endfield_spellbook.spell.jingtingjue.SunderbladeStrikeSpell;
 import com.zzdzt.endfield_spellbook.spell.liquidnitrogencannon.LiquidNitrogenCannonSpell;
+import com.zzdzt.endfield_spellbook.spell.tidalwave.TidalWaveSpell;
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanSpell;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.SmoulderingFireSpell;
 import com.zzdzt.endfield_spellbook.spell.test.TestApplyCryoSpell;
@@ -70,6 +71,10 @@ public class SpellRegistry {
     // ========== 指定研究对象 ==========
     public static final RegistryObject<AbstractSpell> DESIGNATED_SUBJECT =
         SPELLS.register("designated_subject", FocusSpell::new);
+
+    // ========== 踏潮卷浪 ==========
+    public static final RegistryObject<AbstractSpell> TIDAL_WAVE =
+        SPELLS.register("tidal_wave", TidalWaveSpell::new);
 
     public static void register(IEventBus eventBus) {
         SPELLS.register(eventBus);

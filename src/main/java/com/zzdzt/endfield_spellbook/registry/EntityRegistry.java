@@ -14,6 +14,8 @@ import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanEntity;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.FlameRingEntity;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.FlameRingAttackEntity;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.PhantomBladeEntity;
+import com.zzdzt.endfield_spellbook.spell.tidalwave.entity.WaterTornadoEntity;
+import com.zzdzt.endfield_spellbook.spell.tidalwave.entity.WhirlpoolEntity;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
@@ -156,6 +158,26 @@ public class EntityRegistry {
                 .clientTrackingRange(0)
                 .updateInterval(20)
                 .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "focus_mark").toString())
+        );
+
+    // 涡流（踏潮卷浪：潮汐冲击命中生成的场资源，可被下次施法消耗转化为水龙卷）
+    public static final RegistryObject<EntityType<WhirlpoolEntity>> TIDAL_WHIRLPOOL =
+        ENTITY_TYPES.register("tidal_whirlpool", () ->
+            EntityType.Builder.<WhirlpoolEntity>of(WhirlpoolEntity::new, MobCategory.MISC)
+                .sized(0.6f, 0.3f)
+                .clientTrackingRange(64)
+                .updateInterval(20)
+                .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "tidal_whirlpool").toString())
+        );
+
+    // 水龙卷（踏潮卷浪：消耗涡流在其原位置生成的持续寒冷输出实体，AoeEntity 基类）
+    public static final RegistryObject<EntityType<WaterTornadoEntity>> WATER_TORNADO =
+        ENTITY_TYPES.register("water_tornado", () ->
+            EntityType.Builder.<WaterTornadoEntity>of(WaterTornadoEntity::new, MobCategory.MISC)
+                .sized(1.0f, 3.0f)
+                .clientTrackingRange(64)
+                .updateInterval(2)
+                .build(ResourceLocation.fromNamespaceAndPath(EndfieldSpellbook.MOD_ID, "water_tornado").toString())
         );
 
     public static void register(IEventBus eventBus) {

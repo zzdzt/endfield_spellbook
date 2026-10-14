@@ -10,6 +10,7 @@ import com.zzdzt.endfield_spellbook.effect.HeatVulnerableEffect;
 import com.zzdzt.endfield_spellbook.effect.LiquidNitrogenMarkedEffect;
 import com.zzdzt.endfield_spellbook.effect.MoltenFireMarkEffect;
 import com.zzdzt.endfield_spellbook.effect.WindArrowFloatEffect;
+import com.zzdzt.endfield_spellbook.spell.tidalwave.TidalWaveDashEffect;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
@@ -50,6 +51,11 @@ public final class EffectRegistry {
     /** 聚焦 HUD 标记（纯显示，施加/移除由 FocusMarkEntity 托管）。 */
     public static final RegistryObject<MobEffect> FOCUSED =
         EFFECTS.register("focused", FocusedEffect::new);
+
+    // ========== 踏潮卷浪 ==========
+    /** 潮汐突进冲刺窗口（撞击/到期触发寒冷冲击；隐形效果）。 */
+    public static final RegistryObject<MobEffect> TIDAL_WAVE_DASH =
+        EFFECTS.register("tidal_wave_dash", TidalWaveDashEffect::new);
 
     public static void register(IEventBus eventBus) {
         EFFECTS.register(eventBus);

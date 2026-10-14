@@ -17,6 +17,8 @@ import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanRenderer;
 import com.zzdzt.endfield_spellbook.spell.lizhiyan.LizhiYanSwordModel;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.FlameRingRenderer;
 import com.zzdzt.endfield_spellbook.spell.smoulderingfire.PhantomBladeRenderer;
+import com.zzdzt.endfield_spellbook.spell.tidalwave.client.WaterTornadoRenderer;
+import com.zzdzt.endfield_spellbook.spell.tidalwave.client.WhirlpoolRenderer;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraft.client.renderer.entity.NoopRenderer;
@@ -98,6 +100,18 @@ public class ClientSetup {
         event.registerEntityRenderer(
             EntityRegistry.BLOODWING.get(),
             NoopRenderer::new
+        );
+
+        // 踏潮卷浪·涡流：贴地双层旋转水环 + 中心漩涡锥
+        event.registerEntityRenderer(
+            EntityRegistry.TIDAL_WHIRLPOOL.get(),
+            WhirlpoolRenderer::new
+        );
+
+        // 踏潮卷浪·水龙卷：三层螺旋水柱 + 底部溅射环 + 冰蓝高光
+        event.registerEntityRenderer(
+            EntityRegistry.WATER_TORNADO.get(),
+            WaterTornadoRenderer::new
         );
     }
 
