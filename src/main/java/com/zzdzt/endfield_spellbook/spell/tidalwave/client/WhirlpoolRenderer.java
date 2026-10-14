@@ -9,8 +9,8 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 涡流渲染器：EntityRenderer 接入点（≈LizhiYanBlastRenderer 的转发角色），
- * 实际绘制全部委托 {@link TidalWaveVfxRenderer}。
+ * 涡流渲染入口。
+ * Entity 生命周期保持不变，所有视觉逻辑交给 TidalWaveVfxRenderer。
  */
 public class WhirlpoolRenderer extends EntityRenderer<WhirlpoolEntity> {
 
@@ -19,8 +19,7 @@ public class WhirlpoolRenderer extends EntityRenderer<WhirlpoolEntity> {
     }
 
     @Override
-    public boolean shouldRender(WhirlpoolEntity entity, Frustum camera,
-                                double camX, double camY, double camZ) {
+    public boolean shouldRender(WhirlpoolEntity entity, Frustum camera, double camX, double camY, double camZ) {
         return true;
     }
 
@@ -29,7 +28,6 @@ public class WhirlpoolRenderer extends EntityRenderer<WhirlpoolEntity> {
                        PoseStack poseStack, MultiBufferSource bufferSource, int light) {
         TidalWaveVfxRenderer.renderWhirlpool(entity,
             new TidalWaveRenderContext(poseStack, bufferSource, partialTicks));
-        super.render(entity, yaw, partialTicks, poseStack, bufferSource, light);
     }
 
     @Override
